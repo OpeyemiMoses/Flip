@@ -671,17 +671,17 @@ export default function App() {
           const ethM = markets.find((m) => m.underlyingAsset === 'ETH') || markets[1];
           const solM = markets.find((m) => m.underlyingAsset === 'SOL') || markets[2];
 
-          const btcPrice = btcM?.currentPrice || 87450.0;
-          const ethPrice = ethM?.currentPrice || 2180.5;
-          const solPrice = solM?.currentPrice || 138.2;
+          const btcPrice = btcM?.currentPrice || 79067.0;
+          const ethPrice = ethM?.currentPrice || 2483.8;
+          const solPrice = solM?.currentPrice || 104.4;
 
-          const btcUpProb = btcM ? Math.round(btcM.bestUpProbability * 100) : 62;
+          const btcUpProb = btcM ? Math.round(btcM.bestUpProbability * 100) : 52;
           const btcDownProb = 100 - btcUpProb;
 
-          const ethUpProb = ethM ? Math.round(ethM.bestUpProbability * 100) : 54;
+          const ethUpProb = ethM ? Math.round(ethM.bestUpProbability * 100) : 51;
           const ethDownProb = 100 - ethUpProb;
 
-          const solUpProb = solM ? Math.round(solM.bestUpProbability * 100) : 48;
+          const solUpProb = solM ? Math.round(solM.bestUpProbability * 100) : 49;
           const solDownProb = 100 - solUpProb;
 
           return (
@@ -750,7 +750,7 @@ export default function App() {
                   ${btcPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
                 <div className="font-terminal" style={{ fontSize: '0.78rem', color: '#9CA3AF', marginBottom: '1.15rem' }}>
-                  TARGET STRIKE: ${btcM?.strikePrice.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '87,500.00'}
+                  TARGET STRIKE: ${btcM?.strikePrice ? btcM.strikePrice.toLocaleString() : (Math.round(btcPrice) + 28).toLocaleString()}
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', marginBottom: '1.15rem' }}>

@@ -62,12 +62,12 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
   const getLivePrice = (asset: string): number => {
     const live = prices[asset]?.price || livePriceStreamer.getPrices()[asset]?.price || markets.find((m) => m.underlyingAsset === asset)?.currentPrice;
     if (live && live > 0) return live;
-    // Direct CoinGecko anchor baselines
-    if (asset === 'BTC') return 79479.0;
-    if (asset === 'ETH') return 2491.88;
-    if (asset === 'SOL') return 105.29;
-    if (asset === 'SUI') return 0.8222;
-    if (asset === 'DOGE') return 0.0903;
+    // Real-time market anchor spot baselines
+    if (asset === 'BTC') return 79067.0;
+    if (asset === 'ETH') return 2483.8;
+    if (asset === 'SOL') return 104.4;
+    if (asset === 'SUI') return 0.823;
+    if (asset === 'DOGE') return 0.0902;
     if (asset === 'PEPE') return 0.00000362;
     return 0.85;
   };
