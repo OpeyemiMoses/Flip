@@ -62,14 +62,15 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
   const getLivePrice = (asset: string): number => {
     const live = prices[asset]?.price || livePriceStreamer.getPrices()[asset]?.price || markets.find((m) => m.underlyingAsset === asset)?.currentPrice;
     if (live && live > 0) return live;
-    // Real-time market anchor spot baselines
-    if (asset === 'BTC') return 79067.0;
-    if (asset === 'ETH') return 2483.8;
-    if (asset === 'SOL') return 104.4;
-    if (asset === 'SUI') return 0.823;
+    // CoinGecko real-time spot baselines
+    if (asset === 'BTC') return 79052.0;
+    if (asset === 'ETH') return 2482.0;
+    if (asset === 'SOL') return 104.31;
+    if (asset === 'SOMI' || asset === 'SOMNIA') return 0.1361;
+    if (asset === 'SUI') return 0.8220;
     if (asset === 'DOGE') return 0.0902;
     if (asset === 'PEPE') return 0.00000362;
-    return 0.85;
+    return 0.1361;
   };
 
   const [activeTab, setActiveTab] = useState<'squad' | 'public'>('squad');
@@ -92,8 +93,10 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
   // Sync strike with live price only on open or token switch (prevents background polling from erasing user typed input)
   useEffect(() => {
     if (isOpen) {
-      const liveSquad = Math.round(getLivePrice(squadAsset));
-      const livePublic = Math.round(getLivePrice(publicAsset));
+      const pSquad = getLivePrice(squadAsset);
+      const pPublic = getLivePrice(publicAsset);
+      const liveSquad = pSquad >= 10 ? Math.round(pSquad) : Number(pSquad.toFixed(4));
+      const livePublic = pPublic >= 10 ? Math.round(pPublic) : Number(pPublic.toFixed(4));
       if (liveSquad > 0) setSquadStrike(liveSquad);
       if (livePublic > 0) setPublicStrike(livePublic);
     }
@@ -730,6 +733,8 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                         <option value="BTC">Bitcoin (BTC / USD)</option>
                         <option value="ETH">Ethereum (ETH / USD)</option>
                         <option value="SOL">Solana (SOL / USD)</option>
+                        <option value="SOMI">Somnia (SOMI / USD)</option>
+                        <option value="SUI">Sui (SUI / USD)</option>
                         <option value="DOGE">Dogecoin (DOGE / USD)</option>
                         <option value="PEPE">Pepe (PEPE / USD)</option>
                       </select>
@@ -1096,6 +1101,8 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                       <option value="BTC">Bitcoin (BTC / USD)</option>
                       <option value="ETH">Ethereum (ETH / USD)</option>
                       <option value="SOL">Solana (SOL / USD)</option>
+                      <option value="SOMI">Somnia (SOMI / USD)</option>
+                      <option value="SUI">Sui (SUI / USD)</option>
                       <option value="DOGE">Dogecoin (DOGE / USD)</option>
                       <option value="PEPE">Pepe (PEPE / USD)</option>
                     </select>

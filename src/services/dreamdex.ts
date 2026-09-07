@@ -195,23 +195,28 @@ export async function fetchLiveCryptoPrices(): Promise<Record<string, LivePriceD
   }
 }
 
-export function calculateStrikeAndProbability(currentPrice: number, asset: string, isOneHour = false) {
-  const baseIntegerPrice = Math.round(currentPrice);
-  const tfMultiplier = isOneHour ? 1.5 : 1.0;
-  let spread = 1;
+export function calculateStrikeAndProbability(currentPrice: number, asset: string) {
+  let strikePrice: number;
 
   if (asset === 'BTC') {
-    // Realistic candle expected moves: 15m ($28), 1h ($42)
-    spread = Math.round(28 * tfMultiplier);
+    // 15m BTC expected candle move: ~$24
+    strikePrice = Math.round(currentPrice) + 24;
   } else if (asset === 'ETH') {
-    // Realistic candle expected moves: 15m ($3), 1h ($5)
-    spread = Math.round(3 * tfMultiplier);
+    // 15m ETH expected candle move: ~$3
+    strikePrice = Math.round(currentPrice) + 3;
   } else if (asset === 'SOL') {
-    // Realistic candle expected moves: 15m ($1), 1h ($2)
-    spread = Math.max(1, Math.round(1 * tfMultiplier));
+    // 15m SOL expected candle move: ~$0.50
+    strikePrice = Number((currentPrice + 0.50).toFixed(2));
+  } else if (asset === 'SUI') {
+    // 15m SUI expected candle move: ~$0.0025
+    strikePrice = Number((currentPrice + 0.0025).toFixed(4));
+  } else if (asset === 'SOMI' || asset === 'SOMNIA') {
+    // 15m SOMI expected candle move: ~$0.0018
+    strikePrice = Number((currentPrice + 0.0018).toFixed(4));
+  } else {
+    strikePrice = currentPrice >= 10 ? Math.round(currentPrice) + 1 : Number((currentPrice * 1.005).toFixed(4));
   }
 
-  const strikePrice = baseIntegerPrice + spread;
   const delta = currentPrice - strikePrice;
   const deltaPercent = delta / (currentPrice || 1);
 
@@ -228,7 +233,7 @@ export function calculateStrikeAndProbability(currentPrice: number, asset: strin
 
 /**
  * Query live binary markets with real-time on-chain and spot market prices
- * Aligned with DreamDEX Event Contracts (BTC, ETH, SOL across 15m and 1h windows)
+ * 5 Canonical 15-Minute Markets: BTC, ETH, SOL, SOMI, SUI
  */
 export async function fetchLiveBinaryMarkets(): Promise<BinaryMarket[]> {
   try {
@@ -241,26 +246,32 @@ export async function fetchLiveBinaryMarkets(): Promise<BinaryMarket[]> {
   const livePrices = await fetchLiveCryptoPrices();
   const now = Date.now();
 
-  const btc15m = calculateStrikeAndProbability(livePrices.BTC.price, 'BTC', false);
-  const eth15m = calculateStrikeAndProbability(livePrices.ETH.price, 'ETH', false);
-  const sol15m = calculateStrikeAndProbability(livePrices.SOL.price, 'SOL', false);
-  const btc1h = calculateStrikeAndProbability(livePrices.BTC.price, 'BTC', true);
-  const eth1h = calculateStrikeAndProbability(livePrices.ETH.price, 'ETH', true);
+  const btcPrice = livePrices.BTC?.price || 79052.0;
+  const ethPrice = livePrices.ETH?.price || 2482.0;
+  const solPrice = livePrices.SOL?.price || 104.31;
+  const somiPrice = livePrices.SOMI?.price || livePrices.SOMNIA?.price || 0.1361;
+  const suiPrice = livePrices.SUI?.price || 0.8220;
+
+  const btc15m = calculateStrikeAndProbability(btcPrice, 'BTC');
+  const eth15m = calculateStrikeAndProbability(ethPrice, 'ETH');
+  const sol15m = calculateStrikeAndProbability(solPrice, 'SOL');
+  const somi15m = calculateStrikeAndProbability(somiPrice, 'SOMI');
+  const sui15m = calculateStrikeAndProbability(suiPrice, 'SUI');
 
   return [
     {
       marketId: 'somnia-btc-15m',
       poolAddress: '0x88c42289F3d2D963F9Ec39343DeB26767664B3'.slice(0, 42) as `0x${string}`,
-      title: 'BTC / USD 15-Minute Strike',
+      title: 'BTC / USD Strike',
       description: `Will Bitcoin price finish above $${btc15m.strikePrice.toLocaleString()} USD at round close? Resolves via DreamDEX TWAP.`,
       underlyingAsset: 'BTC',
       symbol: 'BTCUSDT',
       strikePrice: btc15m.strikePrice,
-      currentPrice: livePrices.BTC.price,
-      change24h: livePrices.BTC.change24h,
-      high24h: livePrices.BTC.high24h,
-      low24h: livePrices.BTC.low24h,
-      lastClosePrice: Number((livePrices.BTC.price * 0.9995).toFixed(2)),
+      currentPrice: btcPrice,
+      change24h: livePrices.BTC?.change24h ?? -0.64,
+      high24h: livePrices.BTC?.high24h ?? 80494.0,
+      low24h: livePrices.BTC?.low24h ?? 79014.0,
+      lastClosePrice: Number((btcPrice * 0.9995).toFixed(2)),
       previousRoundWinningOutcome: 'UP',
       roundNumber: 84,
       expiryTimestampNs: BigInt(now + 12 * 60 * 1000) * 1_000_000n,
@@ -271,23 +282,23 @@ export async function fetchLiveBinaryMarkets(): Promise<BinaryMarket[]> {
       downTokenId: '2',
       bestUpProbability: btc15m.bestUpProbability,
       bestDownProbability: btc15m.bestDownProbability,
-      totalVolumeUSD: livePrices.BTC.volumeUSD > 0 ? livePrices.BTC.volumeUSD * 0.0001 : 94820.0,
-      totalLiquidityUSD: livePrices.BTC.volumeUSD > 0 ? livePrices.BTC.volumeUSD * 0.00025 : 242500.0,
+      totalVolumeUSD: 94820.0,
+      totalLiquidityUSD: 242500.0,
       lastUpdated: now,
     },
     {
       marketId: 'somnia-eth-15m',
       poolAddress: '0x71cA9A22938174548EaF220B888f8d9575B5377D',
-      title: 'ETH / USD 15-Minute Strike',
+      title: 'ETH / USD Strike',
       description: `Will Ethereum price finish above $${eth15m.strikePrice.toLocaleString()} USD at round close? Resolves via DreamDEX TWAP.`,
       underlyingAsset: 'ETH',
       symbol: 'ETHUSDT',
       strikePrice: eth15m.strikePrice,
-      currentPrice: livePrices.ETH.price,
-      change24h: livePrices.ETH.change24h,
-      high24h: livePrices.ETH.high24h,
-      low24h: livePrices.ETH.low24h,
-      lastClosePrice: Number((livePrices.ETH.price * 1.0006).toFixed(2)),
+      currentPrice: ethPrice,
+      change24h: livePrices.ETH?.change24h ?? 0.15,
+      high24h: livePrices.ETH?.high24h ?? 2532.7,
+      low24h: livePrices.ETH?.low24h ?? 2473.5,
+      lastClosePrice: Number((ethPrice * 1.0006).toFixed(2)),
       previousRoundWinningOutcome: 'DOWN',
       roundNumber: 84,
       expiryTimestampNs: BigInt(now + 8 * 60 * 1000) * 1_000_000n,
@@ -298,23 +309,23 @@ export async function fetchLiveBinaryMarkets(): Promise<BinaryMarket[]> {
       downTokenId: '4',
       bestUpProbability: eth15m.bestUpProbability,
       bestDownProbability: eth15m.bestDownProbability,
-      totalVolumeUSD: livePrices.ETH.volumeUSD > 0 ? livePrices.ETH.volumeUSD * 0.0001 : 61200.0,
-      totalLiquidityUSD: livePrices.ETH.volumeUSD > 0 ? livePrices.ETH.volumeUSD * 0.00025 : 168000.0,
+      totalVolumeUSD: 61200.0,
+      totalLiquidityUSD: 168000.0,
       lastUpdated: now,
     },
     {
       marketId: 'somnia-sol-15m',
       poolAddress: '0x32A44B081395E6a578AcFfB975b3F93427E368a1',
-      title: 'SOL / USD 15-Minute Strike',
-      description: `Will Solana price finish above $${sol15m.strikePrice.toLocaleString()} USD at round close? Resolves via DreamDEX TWAP.`,
+      title: 'SOL / USD Strike',
+      description: `Will Solana price finish above $${sol15m.strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD at round close? Resolves via DreamDEX TWAP.`,
       underlyingAsset: 'SOL',
       symbol: 'SOLUSDT',
       strikePrice: sol15m.strikePrice,
-      currentPrice: livePrices.SOL.price,
-      change24h: livePrices.SOL.change24h,
-      high24h: livePrices.SOL.high24h,
-      low24h: livePrices.SOL.low24h,
-      lastClosePrice: Number((livePrices.SOL.price * 0.9988).toFixed(2)),
+      currentPrice: solPrice,
+      change24h: livePrices.SOL?.change24h ?? -1.45,
+      high24h: livePrices.SOL?.high24h ?? 106.96,
+      low24h: livePrices.SOL?.low24h ?? 103.95,
+      lastClosePrice: Number((solPrice * 0.9988).toFixed(2)),
       previousRoundWinningOutcome: 'UP',
       roundNumber: 84,
       expiryTimestampNs: BigInt(now + 14 * 60 * 1000) * 1_000_000n,
@@ -325,62 +336,62 @@ export async function fetchLiveBinaryMarkets(): Promise<BinaryMarket[]> {
       downTokenId: '6',
       bestUpProbability: sol15m.bestUpProbability,
       bestDownProbability: sol15m.bestDownProbability,
-      totalVolumeUSD: livePrices.SOL.volumeUSD > 0 ? livePrices.SOL.volumeUSD * 0.0001 : 38400.0,
-      totalLiquidityUSD: livePrices.SOL.volumeUSD > 0 ? livePrices.SOL.volumeUSD * 0.00025 : 112000.0,
+      totalVolumeUSD: 38400.0,
+      totalLiquidityUSD: 112000.0,
       lastUpdated: now,
     },
     {
-      marketId: 'somnia-btc-1h',
+      marketId: 'somnia-somi-15m',
       poolAddress: '0x99Fa34d2847B49B11394a1Cd82Bc01E6953f40A2',
-      title: 'BTC / USD 1-Hour Strike',
-      description: `Will Bitcoin price finish above $${btc1h.strikePrice.toLocaleString()} USD at 1-hour expiry? Resolves via DreamDEX TWAP.`,
-      underlyingAsset: 'BTC',
-      symbol: 'BTCUSDT',
-      strikePrice: btc1h.strikePrice,
-      currentPrice: livePrices.BTC.price,
-      change24h: livePrices.BTC.change24h,
-      high24h: livePrices.BTC.high24h,
-      low24h: livePrices.BTC.low24h,
-      lastClosePrice: Number((livePrices.BTC.price * 0.998).toFixed(2)),
+      title: 'SOMI / USD Strike',
+      description: `Will Somnia price finish above $${somi15m.strikePrice.toFixed(4)} USD at round close? Resolves via DreamDEX TWAP.`,
+      underlyingAsset: 'SOMI',
+      symbol: 'SOMIUSDT',
+      strikePrice: somi15m.strikePrice,
+      currentPrice: somiPrice,
+      change24h: livePrices.SOMI?.change24h ?? livePrices.SOMNIA?.change24h ?? 3.90,
+      high24h: livePrices.SOMI?.high24h ?? 0.1378,
+      low24h: livePrices.SOMI?.low24h ?? 0.1285,
+      lastClosePrice: Number((somiPrice * 0.997).toFixed(4)),
       previousRoundWinningOutcome: 'UP',
-      roundNumber: 21,
-      expiryTimestampNs: BigInt(now + 42 * 60 * 1000) * 1_000_000n,
-      expiryDate: new Date(now + 42 * 60 * 1000),
+      roundNumber: 84,
+      expiryTimestampNs: BigInt(now + 11 * 60 * 1000) * 1_000_000n,
+      expiryDate: new Date(now + 11 * 60 * 1000),
       isResolved: false,
       collateralToken: 'tUSDC',
       upTokenId: '7',
       downTokenId: '8',
-      bestUpProbability: btc1h.bestUpProbability,
-      bestDownProbability: btc1h.bestDownProbability,
-      totalVolumeUSD: 145000.0,
-      totalLiquidityUSD: 380000.0,
+      bestUpProbability: somi15m.bestUpProbability,
+      bestDownProbability: somi15m.bestDownProbability,
+      totalVolumeUSD: 42500.0,
+      totalLiquidityUSD: 98000.0,
       lastUpdated: now,
     },
     {
-      marketId: 'somnia-eth-1h',
+      marketId: 'somnia-sui-15m',
       poolAddress: '0x55Bc88192736Fea5436AbC91129846bfa3829023',
-      title: 'ETH / USD 1-Hour Strike',
-      description: `Will Ethereum price finish above $${eth1h.strikePrice.toLocaleString()} USD at 1-hour expiry? Resolves via DreamDEX TWAP.`,
-      underlyingAsset: 'ETH',
-      symbol: 'ETHUSDT',
-      strikePrice: eth1h.strikePrice,
-      currentPrice: livePrices.ETH.price,
-      change24h: livePrices.ETH.change24h,
-      high24h: livePrices.ETH.high24h,
-      low24h: livePrices.ETH.low24h,
-      lastClosePrice: Number((livePrices.ETH.price * 1.002).toFixed(2)),
+      title: 'SUI / USD Strike',
+      description: `Will Sui price finish above $${sui15m.strikePrice.toFixed(4)} USD at round close? Resolves via DreamDEX TWAP.`,
+      underlyingAsset: 'SUI',
+      symbol: 'SUIUSDT',
+      strikePrice: sui15m.strikePrice,
+      currentPrice: suiPrice,
+      change24h: livePrices.SUI?.change24h ?? 3.67,
+      high24h: livePrices.SUI?.high24h ?? 0.8436,
+      low24h: livePrices.SUI?.low24h ?? 0.7860,
+      lastClosePrice: Number((suiPrice * 1.002).toFixed(4)),
       previousRoundWinningOutcome: 'DOWN',
-      roundNumber: 21,
-      expiryTimestampNs: BigInt(now + 35 * 60 * 1000) * 1_000_000n,
-      expiryDate: new Date(now + 35 * 60 * 1000),
+      roundNumber: 84,
+      expiryTimestampNs: BigInt(now + 9 * 60 * 1000) * 1_000_000n,
+      expiryDate: new Date(now + 9 * 60 * 1000),
       isResolved: false,
       collateralToken: 'tUSDC',
       upTokenId: '9',
       downTokenId: '10',
-      bestUpProbability: eth1h.bestUpProbability,
-      bestDownProbability: eth1h.bestDownProbability,
-      totalVolumeUSD: 92800.0,
-      totalLiquidityUSD: 240000.0,
+      bestUpProbability: sui15m.bestUpProbability,
+      bestDownProbability: sui15m.bestDownProbability,
+      totalVolumeUSD: 52800.0,
+      totalLiquidityUSD: 140000.0,
       lastUpdated: now,
     },
   ];

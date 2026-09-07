@@ -67,47 +67,45 @@ const STORAGE_USER_MARKETS_KEY = 'flip_user_created_markets';
  * Anchored strictly to the closing resolution price within achievable short-interval expected move bands:
  * - BTC (15m): $20 - $55 achievable move (0.025% - 0.07% of spot)
  * - ETH (15m): $2 - $5 achievable move
- * - SOL (15m): $1 - $2 achievable move
- * - Strict clean integer values without decimals for prediction questions & strikes.
+/**
+ * Computes a realistic, volatility-calibrated next prediction strike.
+ * Anchored strictly to the closing resolution price within achievable short-interval expected move bands:
+ * - BTC (15m): $20 - $55 achievable move
+ * - ETH (15m): $2 - $5 achievable move
+ * - SOL (15m): $0.40 - $0.80 achievable move
+ * - SOMI (15m): $0.0015 - $0.0030 achievable move
+ * - SUI (15m): $0.0020 - $0.0040 achievable move
  */
 function computeDynamicRolloverStrike(
   resolvedPrice: number,
   asset: string,
   winningSide: 'UP' | 'DOWN',
-  roundNum: number,
-  isOneHour: boolean
+  roundNum: number
 ): number {
-  const tfMultiplier = isOneHour ? 1.5 : 1.0;
-  const baseInteger = Math.round(resolvedPrice);
-
-  // Dynamic realistic point spread based on asset expected move in 15m/1h
-  let pointSpread: number;
+  const sign = winningSide === 'UP' ? 1 : -1;
 
   if (asset === 'BTC') {
-    // 15m BTC realistic candle move: $20 - $55
-    const variance = (roundNum * 7 + (baseInteger % 19)) % 36; // 0 to 35
-    pointSpread = Math.round((20 + variance) * tfMultiplier);
+    const variance = (roundNum * 7 + (Math.round(resolvedPrice) % 19)) % 36;
+    const pointSpread = 20 + variance;
+    return Math.round(resolvedPrice) + pointSpread * sign;
   } else if (asset === 'ETH') {
-    // 15m ETH realistic candle move: $2 - $5
-    const variance = (roundNum * 3 + (baseInteger % 5)) % 4; // 0 to 3
-    pointSpread = Math.round((2 + variance) * tfMultiplier);
+    const variance = (roundNum * 3 + (Math.round(resolvedPrice) % 5)) % 4;
+    const pointSpread = 2 + variance;
+    return Math.round(resolvedPrice) + pointSpread * sign;
   } else if (asset === 'SOL') {
-    // 15m SOL realistic candle move: $1 - $2
-    pointSpread = Math.max(1, Math.round(1 * tfMultiplier));
-  } else {
-    pointSpread = 1;
+    const pointSpread = 0.50;
+    return Number((resolvedPrice + pointSpread * sign).toFixed(2));
+  } else if (asset === 'SUI') {
+    const pointSpread = 0.0025;
+    return Number((resolvedPrice + pointSpread * sign).toFixed(4));
+  } else if (asset === 'SOMI' || asset === 'SOMNIA') {
+    const pointSpread = 0.0018;
+    return Number((resolvedPrice + pointSpread * sign).toFixed(4));
   }
 
-  // Directional momentum: if previous round resolved UP, set strike slightly above close; if DOWN, slightly below
-  const sign = winningSide === 'UP' ? 1 : -1;
-  let target = baseInteger + pointSpread * sign;
-
-  // Safety: ensure strike is never identical to current integer price
-  if (target === baseInteger) {
-    target = winningSide === 'UP' ? baseInteger + 1 : Math.max(baseInteger - 1, 1);
-  }
-
-  return target;
+  return resolvedPrice >= 10
+    ? Math.round(resolvedPrice + sign * 1)
+    : Number((resolvedPrice * (1 + sign * 0.005)).toFixed(4));
 }
 
 export const useMarketStore = create<MarketState>((set, get) => ({
@@ -310,8 +308,8 @@ export const useMarketStore = create<MarketState>((set, get) => ({
         }
 
         // 2. Spawn the NEXT round with a fresh strike anchored to the previous closing price & current spot
-        const isOneHour = m.marketId.includes('1h');
-        const nextDurationMs = isOneHour ? 60 * 60 * 1000 : 15 * 60 * 1000;
+        const isCustom = !m.marketId.startsWith('somnia-');
+        const nextDurationMs = isCustom && m.marketId.includes('1h') ? 60 * 60 * 1000 : 15 * 60 * 1000;
         const nextExpiryDate = new Date(now + nextDurationMs);
 
         // Dynamically compute next strike price anchored authentically to closing price
@@ -320,14 +318,14 @@ export const useMarketStore = create<MarketState>((set, get) => ({
           livePrice,
           m.underlyingAsset,
           winningSide,
-          newRoundNum,
-          isOneHour
+          newRoundNum
         );
 
         const delta = livePrice - nextStrike;
         const deltaPct = delta / (livePrice || 1);
         const nextUpProb = Number(Math.min(Math.max(0.50 + deltaPct * 15, 0.15), 0.85).toFixed(2));
         const nextDownProb = Number((1 - nextUpProb).toFixed(2));
+        const formattedStrikeStr = nextStrike < 1 ? nextStrike.toFixed(4) : nextStrike.toLocaleString(undefined, { minimumFractionDigits: nextStrike % 1 !== 0 ? 2 : 0 });
 
         return {
           ...m,
@@ -336,7 +334,7 @@ export const useMarketStore = create<MarketState>((set, get) => ({
           lastClosePrice: livePrice,
           previousRoundWinningOutcome: winningSide,
           roundNumber: newRoundNum,
-          description: `Will ${m.underlyingAsset} finish above $${nextStrike.toLocaleString()} USD? Resolves via DreamDEX TWAP.`,
+          description: `Will ${m.underlyingAsset} finish above $${formattedStrikeStr} USD? Resolves via DreamDEX TWAP.`,
           expiryDate: nextExpiryDate,
           expiryTimestampNs: BigInt(nextExpiryDate.getTime()) * 1_000_000n,
           bestUpProbability: nextUpProb,

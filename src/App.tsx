@@ -671,9 +671,9 @@ export default function App() {
           const ethM = markets.find((m) => m.underlyingAsset === 'ETH') || markets[1];
           const solM = markets.find((m) => m.underlyingAsset === 'SOL') || markets[2];
 
-          const btcPrice = btcM?.currentPrice || 79067.0;
-          const ethPrice = ethM?.currentPrice || 2483.8;
-          const solPrice = solM?.currentPrice || 104.4;
+          const btcPrice = btcM?.currentPrice || 79052.0;
+          const ethPrice = ethM?.currentPrice || 2482.0;
+          const solPrice = solM?.currentPrice || 104.31;
 
           const btcUpProb = btcM ? Math.round(btcM.bestUpProbability * 100) : 52;
           const btcDownProb = 100 - btcUpProb;

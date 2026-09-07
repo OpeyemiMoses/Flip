@@ -756,9 +756,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
                         <Activity size={15} color={isSelected ? 'var(--color-black)' : '#9CA3AF'} />
-                        <span>
-                          {m.underlyingAsset} / USD {m.marketId.includes('1h') ? '1H' : '15M'}
-                        </span>
+                        <span>{m.underlyingAsset} / USD Strike</span>
                       </div>
                       <span className="font-terminal" style={{ fontSize: '0.76rem', color: isSelected ? 'var(--color-black)' : '#9CA3AF', fontWeight: 700 }}>
                         {formatPercent(m.bestUpProbability)}
@@ -1115,7 +1113,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                         )}
                       </div>
                       <div className="font-bobz" style={{ fontSize: '2.35rem', color: 'var(--color-black)', letterSpacing: '-0.02em', lineHeight: 1 }}>
-                        ${selectedMarket?.currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ${selectedMarket ? (selectedMarket.currentPrice < 1 ? selectedMarket.currentPrice.toFixed(4) : selectedMarket.currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : '0.00'}
                       </div>
                     </div>
 
@@ -1124,11 +1122,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                         TARGET STRIKE BARRIER
                       </span>
                       <div className="font-terminal" style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-black)' }}>
-                        ${selectedMarket?.strikePrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        ${selectedMarket ? (selectedMarket.strikePrice < 1 ? selectedMarket.strikePrice.toFixed(4) : selectedMarket.strikePrice.toLocaleString('en-US', { minimumFractionDigits: selectedMarket.strikePrice % 1 !== 0 ? 2 : 0 })) : '0.00'}
                       </div>
                       {selectedMarket?.lastClosePrice && (
                         <div className="font-terminal" style={{ fontSize: '0.72rem', color: '#6B7280', marginTop: '0.25rem' }}>
-                          Prev Close Anchor: <span style={{ fontWeight: 700, color: selectedMarket.previousRoundWinningOutcome === 'UP' ? 'var(--color-green)' : 'var(--color-red)' }}>${selectedMarket.lastClosePrice.toLocaleString()} ({selectedMarket.previousRoundWinningOutcome || 'SETTLED'})</span>
+                          Prev Close Anchor: <span style={{ fontWeight: 700, color: selectedMarket.previousRoundWinningOutcome === 'UP' ? 'var(--color-green)' : 'var(--color-red)' }}>${selectedMarket.lastClosePrice < 1 ? selectedMarket.lastClosePrice.toFixed(4) : selectedMarket.lastClosePrice.toLocaleString()} ({selectedMarket.previousRoundWinningOutcome || 'SETTLED'})</span>
                         </div>
                       )}
                     </div>

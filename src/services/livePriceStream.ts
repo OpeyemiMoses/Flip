@@ -1,9 +1,8 @@
 /**
  * Real-Time High-Precision Crypto Market Price Streaming Engine
- * Primary: Binance Vision Public Data Oracles (Zero CORS, 0 rate limits, 0 geo-blocks, sub-second multi-ticker batch)
- * Failover Tier 1: Binance Spot API
+ * Primary: CoinGecko Public Spot Oracle (Exact 1:1 parity with CoinGecko webpage prices)
+ * Failover Tier 1: Binance Vision Public Data API
  * Failover Tier 2: Gate.io Spot Oracles
- * Failover Tier 3: CoinGecko USD Price API
  * Includes anti-jitter smoothing and persistent price retention.
  */
 
@@ -25,11 +24,12 @@ class LivePriceStreamer {
   private isFetching = false;
   private lastFetchTime = 0;
   private cachedPrices: Record<string, LiveTokenPrice> = {
-    BTC: { symbol: 'BTC', price: 79067.0, change24h: -0.71, high24h: 80560.0, low24h: 79001.0, volumeUSD: 24688000000, lastUpdated: Date.now() },
-    ETH: { symbol: 'ETH', price: 2483.8, change24h: 0.17, high24h: 2536.6, low24h: 2460.9, volumeUSD: 11234000000, lastUpdated: Date.now() },
-    SOL: { symbol: 'SOL', price: 104.4, change24h: -1.35, high24h: 107.06, low24h: 103.8, volumeUSD: 3432000000, lastUpdated: Date.now() },
-    SOMNIA: { symbol: 'SOMNIA', price: 0.85, change24h: 1.8, high24h: 0.92, low24h: 0.79, volumeUSD: 2450000, lastUpdated: Date.now() },
-    SUI: { symbol: 'SUI', price: 0.823, change24h: 3.86, high24h: 0.8447, low24h: 0.784, volumeUSD: 643000000, lastUpdated: Date.now() },
+    BTC: { symbol: 'BTC', price: 79052.0, change24h: -0.64, high24h: 80494.0, low24h: 79014.0, volumeUSD: 22903000000, lastUpdated: Date.now() },
+    ETH: { symbol: 'ETH', price: 2482.0, change24h: 0.15, high24h: 2532.7, low24h: 2473.5, volumeUSD: 11283000000, lastUpdated: Date.now() },
+    SOL: { symbol: 'SOL', price: 104.31, change24h: -1.45, high24h: 106.96, low24h: 103.95, volumeUSD: 3322000000, lastUpdated: Date.now() },
+    SOMI: { symbol: 'SOMI', price: 0.1361, change24h: 3.90, high24h: 0.1378, low24h: 0.1285, volumeUSD: 2408000, lastUpdated: Date.now() },
+    SOMNIA: { symbol: 'SOMNIA', price: 0.1361, change24h: 3.90, high24h: 0.1378, low24h: 0.1285, volumeUSD: 2408000, lastUpdated: Date.now() },
+    SUI: { symbol: 'SUI', price: 0.8220, change24h: 3.67, high24h: 0.8436, low24h: 0.7860, volumeUSD: 710000000, lastUpdated: Date.now() },
     DOGE: { symbol: 'DOGE', price: 0.0902, change24h: 1.55, high24h: 0.0919, low24h: 0.0877, volumeUSD: 794000000, lastUpdated: Date.now() },
     PEPE: { symbol: 'PEPE', price: 0.00000362, change24h: 1.40, high24h: 0.00000371, low24h: 0.00000353, volumeUSD: 191000000, lastUpdated: Date.now() },
   };
@@ -46,7 +46,6 @@ class LivePriceStreamer {
 
   public subscribe(listener: PriceUpdateListener): () => void {
     this.listeners.add(listener);
-    // Send immediate snapshot to subscriber
     listener(this.cachedPrices);
     return () => {
       this.listeners.delete(listener);
@@ -65,10 +64,8 @@ class LivePriceStreamer {
   }
 
   public init() {
-    // 1. Immediate initial price pull
     this.fetchRestPrices();
 
-    // 2. Continuous price sync every 5 seconds (5000ms)
     if (!this.pollTimer) {
       this.pollTimer = setInterval(() => {
         this.fetchRestPrices();
@@ -77,7 +74,7 @@ class LivePriceStreamer {
   }
 
   /**
-   * Ultra-fast multi-source resilient crypto spot price oracle engine
+   * Primary: Direct CoinGecko Real-Time Spot Price Oracle
    */
   public async fetchRestPrices(): Promise<Record<string, LiveTokenPrice>> {
     const now = Date.now();
@@ -89,66 +86,63 @@ class LivePriceStreamer {
     this.lastFetchTime = now;
     let updated = false;
 
-    // 1. Primary: Binance Vision 24hr Multi-Ticker Batch Oracle (fastest, unblocked, 0 rate limit)
+    // 1. PRIMARY ORACLE: CoinGecko Simple Price API (1:1 with CoinGecko page)
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5500);
+      const timeoutId = setTimeout(() => controller.abort(), 4500);
 
-      const symbolsParam = encodeURIComponent('["BTCUSDT","ETHUSDT","SOLUSDT","SUIUSDT","DOGEUSDT","PEPEUSDT"]');
-      const res = await fetch(`https://data-api.binance.vision/api/v3/ticker/24hr?symbols=${symbolsParam}`, {
-        signal: controller.signal,
-      });
+      const res = await fetch(
+        'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,somnia,sui,dogecoin,pepe&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true',
+        { signal: controller.signal }
+      );
       clearTimeout(timeoutId);
 
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          const symMap: Record<string, string> = {
-            BTCUSDT: 'BTC',
-            ETHUSDT: 'ETH',
-            SOLUSDT: 'SOL',
-            SUIUSDT: 'SUI',
-            DOGEUSDT: 'DOGE',
-            PEPEUSDT: 'PEPE',
-          };
+        const mapping: Record<string, string> = {
+          bitcoin: 'BTC',
+          ethereum: 'ETH',
+          solana: 'SOL',
+          somnia: 'SOMI',
+          sui: 'SUI',
+          dogecoin: 'DOGE',
+          pepe: 'PEPE',
+        };
 
-          for (const item of data) {
-            const sym = symMap[item.symbol];
-            if (sym) {
-              const price = parseFloat(item.lastPrice);
-              const change24h = parseFloat(item.priceChangePercent);
-              const high24h = parseFloat(item.highPrice);
-              const low24h = parseFloat(item.lowPrice);
-              const volumeUSD = parseFloat(item.quoteVolume);
+        for (const [id, sym] of Object.entries(mapping)) {
+          if (data[id]?.usd !== undefined) {
+            const price = Number(data[id].usd);
+            const change24h = Number((data[id].usd_24h_change || 0).toFixed(2));
+            const volumeUSD = data[id].usd_24h_vol || 0;
 
-              if (price > 0 && !isNaN(price)) {
-                this.cachedPrices[sym] = {
-                  symbol: sym,
-                  price,
-                  change24h: isNaN(change24h) ? 0 : Number(change24h.toFixed(2)),
-                  high24h: isNaN(high24h) ? price * 1.02 : high24h,
-                  low24h: isNaN(low24h) ? price * 0.98 : low24h,
-                  volumeUSD: isNaN(volumeUSD) ? 0 : volumeUSD,
-                  lastUpdated: Date.now(),
-                };
-                updated = true;
-              }
+            this.cachedPrices[sym] = {
+              symbol: sym,
+              price,
+              change24h,
+              high24h: this.cachedPrices[sym]?.high24h ? Math.max(this.cachedPrices[sym].high24h, price) : price * 1.02,
+              low24h: this.cachedPrices[sym]?.low24h ? Math.min(this.cachedPrices[sym].low24h, price) : price * 0.98,
+              volumeUSD,
+              lastUpdated: Date.now(),
+            };
+            if (sym === 'SOMI') {
+              this.cachedPrices.SOMNIA = { ...this.cachedPrices[sym], symbol: 'SOMNIA' };
             }
+            updated = true;
           }
         }
       }
     } catch {
-      // Binance Vision error -> proceed to standard Binance API
+      // Failover to Binance Vision
     }
 
-    // 2. Secondary: Binance Standard Spot API
+    // 2. FAILOVER TIER 1: Binance Vision 24hr Multi-Ticker Batch Oracle
     if (!updated) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5500);
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
 
         const symbolsParam = encodeURIComponent('["BTCUSDT","ETHUSDT","SOLUSDT","SUIUSDT","DOGEUSDT","PEPEUSDT"]');
-        const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${symbolsParam}`, {
+        const res = await fetch(`https://data-api.binance.vision/api/v3/ticker/24hr?symbols=${symbolsParam}`, {
           signal: controller.signal,
         });
         clearTimeout(timeoutId);
@@ -190,12 +184,10 @@ class LivePriceStreamer {
             }
           }
         }
-      } catch {
-        // Proceed to Gate.io
-      }
+      } catch {}
     }
 
-    // 3. Tertiary Fallback: Gate.io Targeted Spot Pair Oracles
+    // 3. FAILOVER TIER 2: Gate.io Spot Pair Oracles
     if (!updated) {
       const gatePairs: { pair: string; sym: string }[] = [
         { pair: 'BTC_USDT', sym: 'BTC' },
@@ -209,7 +201,7 @@ class LivePriceStreamer {
       try {
         const fetchPromises = gatePairs.map(async ({ pair, sym }) => {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 6000);
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
           try {
             const res = await fetch(`https://api.gateio.ws/api/v4/spot/tickers?currency_pair=${pair}`, {
               signal: controller.signal,
@@ -248,65 +240,6 @@ class LivePriceStreamer {
         const results = await Promise.allSettled(fetchPromises);
         updated = results.some((r) => r.status === 'fulfilled' && r.value === true);
       } catch {}
-    }
-
-    // 4. Quaternary Fallback: CoinGecko Simple Price
-    if (!updated) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-        const res = await fetch(
-          'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,sui,dogecoin,pepe&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true',
-          { signal: controller.signal }
-        );
-        clearTimeout(timeoutId);
-
-        if (res.ok) {
-          const data = await res.json();
-          const mapping: Record<string, string> = {
-            bitcoin: 'BTC',
-            ethereum: 'ETH',
-            solana: 'SOL',
-            sui: 'SUI',
-            dogecoin: 'DOGE',
-            pepe: 'PEPE',
-          };
-
-          for (const [id, sym] of Object.entries(mapping)) {
-            if (data[id]?.usd !== undefined) {
-              const price = Number(data[id].usd);
-              const change24h = Number((data[id].usd_24h_change || 0).toFixed(2));
-              const volumeUSD = data[id].usd_24h_vol || 0;
-
-              this.cachedPrices[sym] = {
-                symbol: sym,
-                price,
-                change24h,
-                high24h: price * (1 + Math.abs(change24h) / 200 + 0.01),
-                low24h: price * (1 - Math.abs(change24h) / 200 - 0.01),
-                volumeUSD,
-                lastUpdated: Date.now(),
-              };
-              updated = true;
-            }
-          }
-        }
-      } catch {}
-    }
-
-    // Update SOMNIA native token price anchored to ecosystem SOL momentum
-    if (this.cachedPrices.SOL) {
-      const solChange = this.cachedPrices.SOL.change24h || 0;
-      this.cachedPrices.SOMNIA = {
-        symbol: 'SOMNIA',
-        price: 0.85,
-        change24h: Number((solChange * 0.8 + 1.2).toFixed(2)),
-        high24h: 0.94,
-        low24h: 0.81,
-        volumeUSD: 2450000,
-        lastUpdated: Date.now(),
-      };
     }
 
     this.isFetching = false;
