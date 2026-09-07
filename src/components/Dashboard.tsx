@@ -171,6 +171,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
 
       if (diffMs <= 0) {
         setTimeRemaining('Resolving...');
+        useMarketStore.getState().checkAndRolloverMarkets();
         return;
       }
 

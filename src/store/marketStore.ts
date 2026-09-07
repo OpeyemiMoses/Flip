@@ -266,7 +266,7 @@ export const useMarketStore = create<MarketState>((set, get) => ({
       return now >= expiryMs && !m.isResolved;
     });
 
-    // If resolving, fetch fresh un-cached direct live spot prices from CoinGecko oracle at this exact second
+    // If resolving, fetch fresh un-cached direct live spot prices from live oracle at this exact second
     let freshOraclePrices: Record<string, any> = currentPrices || {};
     if (hasExpiredMarket) {
       try {
@@ -287,11 +287,14 @@ export const useMarketStore = create<MarketState>((set, get) => ({
       // Check if round has expired
       if (now >= expiryMs) {
         marketsUpdated = true;
-        // MUST use fresh oracle price directly at resolution moment, NOT cached on-screen prices
+        // Strictly use fresh live oracle spot price at the exact moment of timer completion
         const livePrice =
           freshOraclePrices[m.underlyingAsset]?.price ||
-          livePriceStreamer.getPrices()[m.underlyingAsset]?.price ||
-          m.currentPrice;
+          livePriceStreamer.getPrices()[m.underlyingAsset]?.price;
+
+        if (!livePrice || isNaN(livePrice)) {
+          return m;
+        }
 
         const winningSide: 'UP' | 'DOWN' = livePrice >= m.strikePrice ? 'UP' : 'DOWN';
 

@@ -26,6 +26,7 @@ export function useMarkets() {
       if (diffMs <= 0) {
         setTimeRemaining('Resolving...');
         setProgressPercent(0);
+        useMarketStore.getState().checkAndRolloverMarkets();
         return;
       }
 
