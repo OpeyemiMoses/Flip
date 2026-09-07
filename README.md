@@ -1,13 +1,10 @@
 <div align="center">
 
-  <img src="./public/assets/flip_logo.png" alt="FLIP Logo" width="180" />
+  <img src="./public/assets/flip_logo.png" alt="FLIP Logo" width="160" />
 
-  # FLIP ⚡ — High-Velocity Consumer Prediction Protocol
+  # FLIP — High-Velocity Consumer Prediction Protocol
 
-  [![Somnia Shannon](https://img.shields.io/badge/Somnia_Shannon_Testnet-Chain_ID_50312-00C278?style=flat&logo=ethereum&logoColor=white)](https://shannon-explorer.somnia.network)
-  [![DreamDEX](https://img.shields.io/badge/Powered_by-DreamDEX_Event_Contracts-111827?style=flat)](https://shannon-explorer.somnia.network)
-  [![TPS](https://img.shields.io/badge/Peak_Engine-400k+_TPS-F59E0B?style=flat)](https://somnia.network)
-  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat)](./LICENSE)
+  **Somnia Shannon Testnet (Chain ID 50312) • DreamDEX Event Contracts Engine • 400,000+ Peak TPS**
 
   <br />
 
@@ -18,26 +15,26 @@
 
   **Consumer-Grade Binary Trading Interface • Sealed-Odds Squad PvP Showdowns • Sub-150ms Exchange Feeds**
 
-  [Launch Terminal](https://github.com/OpeyemiMoses/Flip) • [Contract Directory](#-somnia-shannon-testnet-verified-contracts) • [Documentation](#-system-architecture) • [On-Chain Tests](#-on-chain-test-suites)
+  [Launch Terminal](https://github.com/OpeyemiMoses/Flip) • [Contract Directory](#somnia-shannon-testnet-verified-contracts) • [Documentation](#system-architecture) • [On-Chain Tests](#on-chain-test-suites)
 
 </div>
 
 ---
 
-## 📑 Table of Contents
-1. [Overview & Product Vision](#-overview--product-vision)
-2. [Key Innovations & Features](#-key-innovations--features)
-3. [Mathematical Model & Parimutuel Settlement](#-mathematical-model--parimutuel-settlement)
-4. [System Architecture](#-system-architecture)
-5. [Somnia Shannon Testnet Verified Contracts](#-somnia-shannon-testnet-verified-contracts)
-6. [Real-Time Zero-Latency Multi-Exchange Oracle](#-real-time-zero-latency-multi-exchange-oracle)
-7. [Quickstart & Local Setup](#-quickstart--local-setup)
-8. [On-Chain Test Suites](#-on-chain-test-suites)
-9. [Community & Repository Standards](#-community--repository-standards)
+## Table of Contents
+1. [Overview & Product Vision](#overview--product-vision)
+2. [Key Innovations & Features](#key-innovations--features)
+3. [Mathematical Model & Parimutuel Settlement](#mathematical-model--parimutuel-settlement)
+4. [System Architecture](#system-architecture)
+5. [Somnia Shannon Testnet Verified Contracts](#somnia-shannon-testnet-verified-contracts)
+6. [Real-Time Zero-Latency Multi-Exchange Oracle](#real-time-zero-latency-multi-exchange-oracle)
+7. [Quickstart & Local Setup](#quickstart--local-setup)
+8. [On-Chain Test Suites](#on-chain-test-suites)
+9. [Community & Repository Standards](#community--repository-standards)
 
 ---
 
-## ⚡ Overview & Product Vision
+## Overview & Product Vision
 
 FLIP is a next-generation consumer prediction protocol built natively on the **Somnia Shannon Testnet** (Chain ID `50312`) and powered by **DreamDEX Event Contracts**. 
 
@@ -45,7 +42,7 @@ Traditional decentralized prediction markets suffer from slow block finality, hi
 
 ---
 
-## 🌟 Key Innovations & Features
+## Key Innovations & Features
 
 ### 1. 2-Tap Binary Trading Interface
 - **Complete Set Minting**: Deposits convert \$1.00 tUSDC collateral into `1 UP + 1 DOWN` ERC-6909 outcome tokens through DreamDEX Event Contracts.
@@ -59,7 +56,7 @@ Traditional decentralized prediction markets suffer from slow block finality, hi
 
 ### 3. Dynamic Clean-Integer Rollover Engine
 - **Decimals Removed**: Prediction questions and strike targets are strictly denominated in clean integer prices (e.g., `$79,483`, `$79,521`, `$2,492`, `$106`).
-- **Anchored Volatility Drift**: Subsequent rounds calculate new resistance, momentum, or support targets directly from the previous round's authentic closing spot price.
+- **Achievable Expected Moves**: Subsequent rounds calculate realistic resistance, momentum, or support targets tailored to 15-minute / 1-hour volatility bands.
 
 ### 4. Frictionless Web2/Web3 Onboarding
 - **Privy Email OTP**: Instant non-custodial wallet provisioning with zero seed phrase friction.
@@ -67,7 +64,7 @@ Traditional decentralized prediction markets suffer from slow block finality, hi
 
 ---
 
-## 📐 Mathematical Model & Parimutuel Settlement
+## Mathematical Model & Parimutuel Settlement
 
 ### 1. Parimutuel Pool Equilibrium ($1.00 USDso Parity)
 Every binary market guarantees mathematical conservation of collateral:
@@ -86,7 +83,7 @@ $$\text{Winning Share Payout} = \frac{\text{Total Distributable Pot}}{\text{Tota
 
 ---
 
-## 🏗 System Architecture
+## System Architecture
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -117,7 +114,7 @@ $$\text{Winning Share Payout} = \frac{\text{Total Distributable Pot}}{\text{Tota
 
 ---
 
-## 📜 Somnia Shannon Testnet Verified Contracts
+## Somnia Shannon Testnet Verified Contracts
 
 | Contract Name | Contract Address | Explorer Link |
 | :--- | :--- | :--- |
@@ -130,7 +127,7 @@ $$\text{Winning Share Payout} = \frac{\text{Total Distributable Pot}}{\text{Tota
 
 ---
 
-## ⚡ Real-Time Zero-Latency Multi-Exchange Oracle
+## Real-Time Zero-Latency Multi-Exchange Oracle
 
 FLIP implements a resilient multi-exchange price pipeline:
 1. **Primary Feed (Gate.io Spot API)**: Fetches all supported pairs (`BTC_USDT`, `ETH_USDT`, `SOL_USDT`, `SUI_USDT`, `DOGE_USDT`, `PEPE_USDT`) in a single payload (<150ms latency, 0 rate limits).
@@ -139,7 +136,7 @@ FLIP implements a resilient multi-exchange price pipeline:
 
 ---
 
-## 🚀 Quickstart & Local Setup
+## Quickstart & Local Setup
 
 ### 1. Clone Repository
 ```bash
@@ -172,7 +169,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
-## 🧪 On-Chain Test Suites
+## On-Chain Test Suites
 
 Execute verification scripts against Somnia Shannon testnet:
 
@@ -192,7 +189,7 @@ npm run build
 
 ---
 
-## 📂 Community & Repository Standards
+## Community & Repository Standards
 
 - **[Code of Conduct](./CODE_OF_CONDUCT.md)**: Community standards and harassment-free pledge.
 - **[Contributing Guidelines](./CONTRIBUTING.md)**: Development workflow, design constraints, and PR submission process.
