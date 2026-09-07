@@ -62,7 +62,7 @@ class LivePriceStreamer {
 
   public init() {
     this.fetchRestPrices();
-    this.connectWebSocket();
+    this.connectCoinbaseWebSocket();
 
     // Regular REST backup polling every 5 seconds
     if (!this.restPollTimer) {
@@ -72,10 +72,77 @@ class LivePriceStreamer {
     }
   }
 
-  private connectWebSocket() {
+  private coinbaseWs: WebSocket | null = null;
+  private connectCoinbaseWebSocket() {
     if (typeof window === 'undefined') return;
 
-    // 1. Connect to Binance Public WebSocket Stream
+    try {
+      if (this.coinbaseWs) this.coinbaseWs.close();
+
+      this.coinbaseWs = new WebSocket('wss://ws-feed.exchange.coinbase.com');
+
+      this.coinbaseWs.onopen = () => {
+        this.coinbaseWs?.send(
+          JSON.stringify({
+            type: 'subscribe',
+            product_ids: ['BTC-USD', 'ETH-USD', 'SOL-USD', 'DOGE-USD', 'SUI-USD'],
+            channels: ['ticker'],
+          })
+        );
+      };
+
+      this.coinbaseWs.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data?.type === 'ticker' && data?.product_id && data?.price) {
+            const sym = data.product_id.split('-')[0];
+            const price = parseFloat(data.price);
+            if (sym && price && !isNaN(price)) {
+              this.cachedPrices[sym] = {
+                symbol: sym,
+                price,
+                change24h: parseFloat(data.open_24h) > 0 ? Number((((price - parseFloat(data.open_24h)) / parseFloat(data.open_24h)) * 100).toFixed(2)) : (this.cachedPrices[sym]?.change24h || 0),
+                high24h: parseFloat(data.high_24h) || price,
+                low24h: parseFloat(data.low_24h) || price,
+                volumeUSD: parseFloat(data.volume_24h) || (this.cachedPrices[sym]?.volumeUSD || 0),
+                lastUpdated: Date.now(),
+              };
+
+              // Dynamic SOMNIA STT micro-tick
+              if (sym === 'SOL') {
+                const baseSomnia = this.cachedPrices.SOMNIA?.price || 0.85;
+                const jitter = (Math.random() - 0.5) * 0.0015;
+                this.cachedPrices.SOMNIA = {
+                  ...this.cachedPrices.SOMNIA,
+                  price: Number(Math.max(baseSomnia + jitter, 0.1).toFixed(4)),
+                  lastUpdated: Date.now(),
+                };
+              }
+
+              this.notify();
+            }
+          }
+        } catch {}
+      };
+
+      this.coinbaseWs.onerror = () => {
+        this.connectBinanceWebSocket();
+      };
+
+      this.coinbaseWs.onclose = () => {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = setTimeout(() => {
+          this.connectCoinbaseWebSocket();
+        }, 3000);
+      };
+    } catch {
+      this.connectBinanceWebSocket();
+    }
+  }
+
+  private connectBinanceWebSocket() {
+    if (typeof window === 'undefined') return;
+
     try {
       if (this.ws) {
         this.ws.close();
@@ -116,76 +183,6 @@ class LivePriceStreamer {
                 high24h: high || price,
                 low24h: low || price,
                 volumeUSD,
-                lastUpdated: Date.now(),
-              };
-
-              // Dynamic Somnia STT micro-tick
-              if (asset === 'SOL') {
-                const baseSomnia = this.cachedPrices.SOMNIA?.price || 0.85;
-                const jitter = (Math.random() - 0.5) * 0.0015;
-                this.cachedPrices.SOMNIA = {
-                  ...this.cachedPrices.SOMNIA,
-                  price: Number(Math.max(baseSomnia + jitter, 0.1).toFixed(4)),
-                  lastUpdated: Date.now(),
-                };
-              }
-
-              this.notify();
-            }
-          }
-        } catch {
-          // Non-blocking
-        }
-      };
-
-      this.ws.onerror = () => {
-        this.connectCoinbaseWebSocket();
-      };
-
-      this.ws.onclose = () => {
-        clearTimeout(this.reconnectTimer);
-        this.reconnectTimer = setTimeout(() => {
-          this.connectWebSocket();
-        }, 3000);
-      };
-    } catch {
-      this.connectCoinbaseWebSocket();
-    }
-  }
-
-  private coinbaseWs: WebSocket | null = null;
-  private connectCoinbaseWebSocket() {
-    if (typeof window === 'undefined') return;
-
-    try {
-      if (this.coinbaseWs) this.coinbaseWs.close();
-
-      this.coinbaseWs = new WebSocket('wss://ws-feed.exchange.coinbase.com');
-
-      this.coinbaseWs.onopen = () => {
-        this.coinbaseWs?.send(
-          JSON.stringify({
-            type: 'subscribe',
-            product_ids: ['BTC-USD', 'ETH-USD', 'SOL-USD', 'DOGE-USD', 'SUI-USD'],
-            channels: ['ticker'],
-          })
-        );
-      };
-
-      this.coinbaseWs.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data?.type === 'ticker' && data?.product_id && data?.price) {
-            const sym = data.product_id.split('-')[0];
-            const price = parseFloat(data.price);
-            if (sym && price && !isNaN(price)) {
-              this.cachedPrices[sym] = {
-                symbol: sym,
-                price,
-                change24h: parseFloat(data.open_24h) > 0 ? Number((((price - parseFloat(data.open_24h)) / parseFloat(data.open_24h)) * 100).toFixed(2)) : (this.cachedPrices[sym]?.change24h || 0),
-                high24h: parseFloat(data.high_24h) || price,
-                low24h: parseFloat(data.low_24h) || price,
-                volumeUSD: parseFloat(data.volume_24h) || (this.cachedPrices[sym]?.volumeUSD || 0),
                 lastUpdated: Date.now(),
               };
               this.notify();

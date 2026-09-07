@@ -41,6 +41,7 @@ interface MarketState {
   refreshBalances: () => Promise<void>;
   loadInitialData: () => Promise<void>;
   pollLiveMarketPrices: () => Promise<void>;
+  checkAndRolloverMarkets: (currentPrices?: Record<string, any>) => void;
   refreshPositions: () => void;
   clearPositions: () => void;
   addUserCreatedMarket: (market: BinaryMarket) => void;
@@ -204,9 +205,82 @@ export const useMarketStore = create<MarketState>((set, get) => ({
     set({ privateChallenges: stored });
   },
 
+  checkAndRolloverMarkets: (currentPrices?: Record<string, any>) => {
+    const now = Date.now();
+    const state = get();
+    let marketsUpdated = false;
+
+    const updatedMarkets = state.markets.map((m) => {
+      const expiryMs =
+        m.expiryDate instanceof Date
+          ? m.expiryDate.getTime()
+          : new Date(m.expiryDate || now).getTime();
+
+      // Check if round has expired
+      if (now >= expiryMs) {
+        marketsUpdated = true;
+        const livePrice = currentPrices?.[m.underlyingAsset]?.price || m.currentPrice;
+        const winningSide: 'UP' | 'DOWN' = livePrice >= m.strikePrice ? 'UP' : 'DOWN';
+
+        // 1. Settle open user positions for this market
+        const { wonCount, wonUSD } = TradingEngine.resolvePositionsForMarket(m.marketId, winningSide);
+
+        if (wonCount > 0) {
+          get().addToast({
+            type: 'success',
+            title: `${m.underlyingAsset} Prediction Won! 🏆`,
+            message: `Round resolved ${winningSide} (Strike: $${m.strikePrice.toLocaleString()} vs Spot: $${livePrice.toLocaleString()}). Payout: $${wonUSD.toFixed(2)} tUSDC credited!`,
+          });
+        }
+
+        // 2. Spawn the NEXT round with a fresh strike anchored to current spot price
+        const isOneHour = m.marketId.includes('1h');
+        const nextDurationMs = isOneHour ? 60 * 60 * 1000 : 15 * 60 * 1000;
+        const nextExpiryDate = new Date(now + nextDurationMs);
+
+        // Dynamically compute next strike price and initial probabilities
+        let strikeStep = 50;
+        if (m.underlyingAsset === 'BTC') strikeStep = livePrice > 50000 ? 100 : 50;
+        else if (m.underlyingAsset === 'ETH') strikeStep = 10;
+        else if (m.underlyingAsset === 'SOL') strikeStep = 1;
+        else if (m.underlyingAsset === 'SOMNIA' || m.underlyingAsset === 'SUI') strikeStep = 0.05;
+
+        const nextStrike = Math.round(livePrice / strikeStep) * strikeStep;
+        const delta = livePrice - nextStrike;
+        const deltaPct = delta / (livePrice || 1);
+        const nextUpProb = Number(Math.min(Math.max(0.50 + deltaPct * 15, 0.15), 0.85).toFixed(2));
+        const nextDownProb = Number((1 - nextUpProb).toFixed(2));
+
+        return {
+          ...m,
+          strikePrice: nextStrike,
+          currentPrice: livePrice,
+          expiryDate: nextExpiryDate,
+          expiryTimestampNs: BigInt(nextExpiryDate.getTime()) * 1_000_000n,
+          bestUpProbability: nextUpProb,
+          bestDownProbability: nextDownProb,
+          isResolved: false,
+          lastUpdated: now,
+        };
+      }
+
+      return m;
+    });
+
+    if (marketsUpdated) {
+      set({ markets: updatedMarkets });
+      get().refreshPositions();
+      get().refreshBalances();
+    }
+  },
+
   pollLiveMarketPrices: async () => {
     try {
       const prices = await fetchLiveCryptoPrices();
+      
+      // First, check and roll over any expired rounds
+      get().checkAndRolloverMarkets(prices);
+
       set((state) => {
         const updated = state.markets.map((m) => {
           const live = prices[m.underlyingAsset];
@@ -257,6 +331,7 @@ export const useMarketStore = create<MarketState>((set, get) => ({
 
     // Subscribe to live WebSocket / REST price ticks
     livePriceStreamer.subscribe((livePrices) => {
+      get().checkAndRolloverMarkets(livePrices);
       set((state) => {
         const updated = state.markets.map((m) => {
           const live = livePrices[m.underlyingAsset];

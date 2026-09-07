@@ -258,4 +258,56 @@ export class TradingEngine {
 
     return pos;
   }
+
+  /**
+   * Resolve all active user positions for a market when its round timer expires
+   */
+  public static resolvePositionsForMarket(
+    marketId: string,
+    winningSide: SimpleTradeSide
+  ): { wonCount: number; wonUSD: number } {
+    const positions = this.getStoredPositions();
+    let wonCount = 0;
+    let wonUSD = 0;
+    let changed = false;
+
+    const stats = this.getStoredStats();
+
+    for (const pos of positions) {
+      if (pos.marketId === marketId && pos.status === 'ACTIVE') {
+        pos.resolvedAt = Date.now();
+        changed = true;
+
+        if (pos.side === winningSide) {
+          pos.status = 'WON';
+          pos.currentValueUSD = pos.potentialPayoutUSD;
+          pos.unrealizedPnLUSD = pos.potentialPayoutUSD - pos.investedUSD;
+          pos.unrealizedPnLPercent = ((pos.potentialPayoutUSD - pos.investedUSD) / pos.investedUSD) * 100;
+          wonCount += 1;
+          wonUSD += pos.potentialPayoutUSD;
+
+          stats.wins += 1;
+          stats.winStreak += 1;
+          if (stats.winStreak > stats.maxWinStreak) stats.maxWinStreak = stats.winStreak;
+          stats.netPnLUSD += pos.unrealizedPnLUSD;
+        } else {
+          pos.status = 'LOST';
+          pos.currentValueUSD = 0;
+          pos.unrealizedPnLUSD = -pos.investedUSD;
+          pos.unrealizedPnLPercent = -100;
+
+          stats.losses += 1;
+          stats.winStreak = 0;
+          stats.netPnLUSD -= pos.investedUSD;
+        }
+      }
+    }
+
+    if (changed) {
+      this.savePositions(positions);
+      this.saveStats(stats);
+    }
+
+    return { wonCount, wonUSD };
+  }
 }
