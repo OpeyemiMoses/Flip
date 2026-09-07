@@ -735,8 +735,6 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                         <option value="SOL">Solana (SOL / USD)</option>
                         <option value="SOMI">Somnia (SOMI / USD)</option>
                         <option value="SUI">Sui (SUI / USD)</option>
-                        <option value="DOGE">Dogecoin (DOGE / USD)</option>
-                        <option value="PEPE">Pepe (PEPE / USD)</option>
                       </select>
                     </div>
 
@@ -1103,8 +1101,6 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                       <option value="SOL">Solana (SOL / USD)</option>
                       <option value="SOMI">Somnia (SOMI / USD)</option>
                       <option value="SUI">Sui (SUI / USD)</option>
-                      <option value="DOGE">Dogecoin (DOGE / USD)</option>
-                      <option value="PEPE">Pepe (PEPE / USD)</option>
                     </select>
                   </div>
 

@@ -1,9 +1,8 @@
 /**
  * Real-Time High-Precision Crypto Market Price Streaming Engine
  * Primary: CoinGecko Public Spot Oracle (Exact 1:1 parity with CoinGecko webpage prices)
- * Failover Tier 1: Binance Vision Public Data API
- * Failover Tier 2: Gate.io Spot Oracles
- * Includes anti-jitter smoothing and persistent price retention.
+ * Failover: Binance Vision Public Data API
+ * Focuses on BTC, ETH, SOL, SOMI, SUI with rock-solid stability.
  */
 
 export interface LiveTokenPrice {
@@ -30,8 +29,6 @@ class LivePriceStreamer {
     SOMI: { symbol: 'SOMI', price: 0.1361, change24h: 3.90, high24h: 0.1378, low24h: 0.1285, volumeUSD: 2408000, lastUpdated: Date.now() },
     SOMNIA: { symbol: 'SOMNIA', price: 0.1361, change24h: 3.90, high24h: 0.1378, low24h: 0.1285, volumeUSD: 2408000, lastUpdated: Date.now() },
     SUI: { symbol: 'SUI', price: 0.8220, change24h: 3.67, high24h: 0.8436, low24h: 0.7860, volumeUSD: 710000000, lastUpdated: Date.now() },
-    DOGE: { symbol: 'DOGE', price: 0.0902, change24h: 1.55, high24h: 0.0919, low24h: 0.0877, volumeUSD: 794000000, lastUpdated: Date.now() },
-    PEPE: { symbol: 'PEPE', price: 0.00000362, change24h: 1.40, high24h: 0.00000371, low24h: 0.00000353, volumeUSD: 191000000, lastUpdated: Date.now() },
   };
 
   constructor() {
@@ -74,7 +71,7 @@ class LivePriceStreamer {
   }
 
   /**
-   * Primary: Direct CoinGecko Real-Time Spot Price Oracle
+   * Direct CoinGecko Real-Time Spot Price Oracle
    */
   public async fetchRestPrices(): Promise<Record<string, LiveTokenPrice>> {
     const now = Date.now();
@@ -92,7 +89,7 @@ class LivePriceStreamer {
       const timeoutId = setTimeout(() => controller.abort(), 4500);
 
       const res = await fetch(
-        'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,somnia,sui,dogecoin,pepe&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true',
+        'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,somnia,sui&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true',
         { signal: controller.signal }
       );
       clearTimeout(timeoutId);
@@ -105,8 +102,6 @@ class LivePriceStreamer {
           solana: 'SOL',
           somnia: 'SOMI',
           sui: 'SUI',
-          dogecoin: 'DOGE',
-          pepe: 'PEPE',
         };
 
         for (const [id, sym] of Object.entries(mapping)) {
@@ -131,17 +126,15 @@ class LivePriceStreamer {
           }
         }
       }
-    } catch {
-      // Failover to Binance Vision
-    }
+    } catch {}
 
-    // 2. FAILOVER TIER 1: Binance Vision 24hr Multi-Ticker Batch Oracle
+    // 2. FAILOVER TIER: Binance Vision (Only for assets that fail)
     if (!updated) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const timeoutId = setTimeout(() => controller.abort(), 4500);
 
-        const symbolsParam = encodeURIComponent('["BTCUSDT","ETHUSDT","SOLUSDT","SUIUSDT","DOGEUSDT","PEPEUSDT"]');
+        const symbolsParam = encodeURIComponent('["BTCUSDT","ETHUSDT","SOLUSDT","SUIUSDT"]');
         const res = await fetch(`https://data-api.binance.vision/api/v3/ticker/24hr?symbols=${symbolsParam}`, {
           signal: controller.signal,
         });
@@ -155,8 +148,6 @@ class LivePriceStreamer {
               ETHUSDT: 'ETH',
               SOLUSDT: 'SOL',
               SUIUSDT: 'SUI',
-              DOGEUSDT: 'DOGE',
-              PEPEUSDT: 'PEPE',
             };
 
             for (const item of data) {
@@ -184,61 +175,6 @@ class LivePriceStreamer {
             }
           }
         }
-      } catch {}
-    }
-
-    // 3. FAILOVER TIER 2: Gate.io Spot Pair Oracles
-    if (!updated) {
-      const gatePairs: { pair: string; sym: string }[] = [
-        { pair: 'BTC_USDT', sym: 'BTC' },
-        { pair: 'ETH_USDT', sym: 'ETH' },
-        { pair: 'SOL_USDT', sym: 'SOL' },
-        { pair: 'SUI_USDT', sym: 'SUI' },
-        { pair: 'DOGE_USDT', sym: 'DOGE' },
-        { pair: 'PEPE_USDT', sym: 'PEPE' },
-      ];
-
-      try {
-        const fetchPromises = gatePairs.map(async ({ pair, sym }) => {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000);
-          try {
-            const res = await fetch(`https://api.gateio.ws/api/v4/spot/tickers?currency_pair=${pair}`, {
-              signal: controller.signal,
-            });
-            clearTimeout(timeoutId);
-            if (res.ok) {
-              const data = await res.json();
-              if (Array.isArray(data) && data.length > 0) {
-                const item = data[0];
-                const price = parseFloat(item.last);
-                const change24h = parseFloat(item.change_percentage);
-                const high24h = parseFloat(item.high_24h);
-                const low24h = parseFloat(item.low_24h);
-                const volumeUSD = parseFloat(item.quote_volume) || parseFloat(item.base_volume) * price;
-
-                if (price > 0 && !isNaN(price)) {
-                  this.cachedPrices[sym] = {
-                    symbol: sym,
-                    price,
-                    change24h: isNaN(change24h) ? 0 : Number(change24h.toFixed(2)),
-                    high24h: isNaN(high24h) ? price * 1.02 : high24h,
-                    low24h: isNaN(low24h) ? price * 0.98 : low24h,
-                    volumeUSD: isNaN(volumeUSD) ? 0 : volumeUSD,
-                    lastUpdated: Date.now(),
-                  };
-                  return true;
-                }
-              }
-            }
-          } catch {
-            clearTimeout(timeoutId);
-          }
-          return false;
-        });
-
-        const results = await Promise.allSettled(fetchPromises);
-        updated = results.some((r) => r.status === 'fulfilled' && r.value === true);
       } catch {}
     }
 
