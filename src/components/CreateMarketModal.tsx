@@ -624,7 +624,7 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                             </span>
                             <button
                               type="button"
-                              onClick={() => setSquadStrike(getLivePrice(squadAsset))}
+                              onClick={() => setSquadStrike(Math.round(getLivePrice(squadAsset)))}
                               style={{
                                 fontSize: '0.68rem',
                                 padding: '0.2rem 0.45rem',
@@ -657,11 +657,11 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                             <span>Previous Round Close Anchor:</span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                               <span style={{ fontWeight: 700, color: lastOutcome === 'UP' ? 'var(--color-green)' : 'var(--color-red)' }}>
-                                ${lastClose.toLocaleString()} ({lastOutcome || 'RESOLVED'})
+                                ${Math.round(lastClose).toLocaleString()} ({lastOutcome || 'RESOLVED'})
                               </span>
                               <button
                                 type="button"
-                                onClick={() => setSquadStrike(lastClose)}
+                                onClick={() => setSquadStrike(Math.round(lastClose))}
                                 style={{
                                   fontSize: '0.66rem',
                                   padding: '0.15rem 0.4rem',
@@ -1013,7 +1013,7 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                             </span>
                             <button
                               type="button"
-                              onClick={() => setPublicStrike(getLivePrice(publicAsset))}
+                              onClick={() => setPublicStrike(Math.round(getLivePrice(publicAsset)))}
                               style={{
                                 fontSize: '0.68rem',
                                 padding: '0.2rem 0.45rem',
@@ -1046,11 +1046,11 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                             <span>Previous Round Close Anchor:</span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                               <span style={{ fontWeight: 700, color: lastOutcome === 'UP' ? 'var(--color-green)' : 'var(--color-red)' }}>
-                                ${lastClose.toLocaleString()} ({lastOutcome || 'RESOLVED'})
+                                ${Math.round(lastClose).toLocaleString()} ({lastOutcome || 'RESOLVED'})
                               </span>
                               <button
                                 type="button"
-                                onClick={() => setPublicStrike(lastClose)}
+                                onClick={() => setPublicStrike(Math.round(lastClose))}
                                 style={{
                                   fontSize: '0.66rem',
                                   padding: '0.15rem 0.4rem',

@@ -99,24 +99,16 @@ function computeDynamicRolloverStrike(
 
   const sign = winningSide === 'UP' ? 1 : -1;
   const effectiveBps = (bps * sign * tfMultiplier) / 10000;
-  const rawTarget = resolvedPrice * (1 + effectiveBps);
+  
+  // Clean integer strikes: decimals are NOT included or counted in prediction questions/strikes
+  const baseIntegerPrice = Math.round(resolvedPrice);
+  let target = Math.round(resolvedPrice * (1 + effectiveBps));
 
-  // Maintain authentic price precision without generic whole-number clamping
-  if (asset === 'BTC') {
-    return Number((Math.round(rawTarget * 2) / 2).toFixed(2));
-  } else if (asset === 'ETH') {
-    return Number((Math.round(rawTarget * 10) / 10).toFixed(2));
-  } else if (asset === 'SOL') {
-    return Number((Math.round(rawTarget * 100) / 100).toFixed(2));
-  } else if (asset === 'SOMNIA' || asset === 'SUI') {
-    return Number(rawTarget.toFixed(4));
-  } else if (asset === 'DOGE') {
-    return Number(rawTarget.toFixed(5));
-  } else if (asset === 'PEPE') {
-    return Number(rawTarget.toFixed(8));
+  if (target === baseIntegerPrice) {
+    target = winningSide === 'UP' ? baseIntegerPrice + 1 : Math.max(baseIntegerPrice - 1, 1);
   }
 
-  return Number(rawTarget.toFixed(2));
+  return target;
 }
 
 export const useMarketStore = create<MarketState>((set, get) => ({

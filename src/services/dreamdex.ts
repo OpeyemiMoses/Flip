@@ -201,27 +201,12 @@ export function calculateStrikeAndProbability(currentPrice: number, asset: strin
   if (asset === 'BTC') bps = 10;
   else if (asset === 'ETH') bps = 15;
   else if (asset === 'SOL') bps = 25;
-  else if (asset === 'SOMNIA' || asset === 'SUI') bps = 35;
-  else if (asset === 'DOGE') bps = 40;
-  else if (asset === 'PEPE') bps = 50;
 
-  const rawStrike = currentPrice * (1 + bps / 10000);
-  let strikePrice = rawStrike;
-
-  if (asset === 'BTC') {
-    strikePrice = Number((Math.round(rawStrike * 2) / 2).toFixed(2));
-  } else if (asset === 'ETH') {
-    strikePrice = Number((Math.round(rawStrike * 10) / 10).toFixed(2));
-  } else if (asset === 'SOL') {
-    strikePrice = Number((Math.round(rawStrike * 100) / 100).toFixed(2));
-  } else if (asset === 'SOMNIA' || asset === 'SUI') {
-    strikePrice = Number(rawStrike.toFixed(4));
-  } else if (asset === 'DOGE') {
-    strikePrice = Number(rawStrike.toFixed(5));
-  } else if (asset === 'PEPE') {
-    strikePrice = Number(rawStrike.toFixed(8));
-  } else {
-    strikePrice = Number(rawStrike.toFixed(2));
+  // Clean integer strikes: decimals are NOT included or counted in prediction questions/strikes
+  const baseIntegerPrice = Math.round(currentPrice);
+  let strikePrice = Math.round(currentPrice * (1 + bps / 10000));
+  if (strikePrice === baseIntegerPrice) {
+    strikePrice = baseIntegerPrice + 1;
   }
 
   const delta = currentPrice - strikePrice;
