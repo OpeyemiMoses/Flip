@@ -730,8 +730,6 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                         <option value="BTC">Bitcoin (BTC / USD)</option>
                         <option value="ETH">Ethereum (ETH / USD)</option>
                         <option value="SOL">Solana (SOL / USD)</option>
-                        <option value="SOMNIA">Somnia (SOMNIA / USD)</option>
-                        <option value="SUI">Sui Network (SUI / USD)</option>
                         <option value="DOGE">Dogecoin (DOGE / USD)</option>
                         <option value="PEPE">Pepe (PEPE / USD)</option>
                       </select>
@@ -1098,8 +1096,6 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                       <option value="BTC">Bitcoin (BTC / USD)</option>
                       <option value="ETH">Ethereum (ETH / USD)</option>
                       <option value="SOL">Solana (SOL / USD)</option>
-                      <option value="SOMNIA">Somnia (SOMNIA / USD)</option>
-                      <option value="SUI">Sui Network (SUI / USD)</option>
                       <option value="DOGE">Dogecoin (DOGE / USD)</option>
                       <option value="PEPE">Pepe (PEPE / USD)</option>
                     </select>
