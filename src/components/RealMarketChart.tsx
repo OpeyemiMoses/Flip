@@ -88,30 +88,31 @@ export const RealMarketChart: React.FC<RealMarketChartProps> = ({ market }) => {
     const initialList = generateTimeframeCandles(market.currentPrice);
     setCandles(initialList);
 
-    // Query high-speed Binance Data Vision Kline API for real historical candles
+    // Query high-speed Gate.io Spot Candlesticks API for real historical candles (0 geo-blocks)
     const fetchRemoteKlines = async () => {
-      const sym = market.underlyingAsset === 'SOMNIA' ? 'SOLUSDT' : `${market.underlyingAsset}USDT`;
+      const asset = market.underlyingAsset === 'SOMNIA' ? 'SOL' : market.underlyingAsset;
+      const pair = `${asset}_USDT`;
       try {
-        let res = await fetch(
-          `https://data-api.binance.vision/api/v3/klines?symbol=${sym}&interval=${interval}&limit=${tfConfig.count}`
-        ).catch(() => null);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-        if (!res || !res.ok) {
-          res = await fetch(
-            `https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${interval}&limit=${tfConfig.count}`
-          ).catch(() => null);
-        }
+        const res = await fetch(
+          `https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=${pair}&interval=${interval}&limit=${tfConfig.count}`,
+          { signal: controller.signal }
+        ).catch(() => null);
+        clearTimeout(timeoutId);
 
         if (res && res.ok) {
           const raw = await res.json();
-          if (Array.isArray(raw) && raw.length > 5) {
+          if (Array.isArray(raw) && raw.length > 3) {
+            // Gate.io returns oldest to newest: [time_sec, quote_volume, close, high, low, open, ...]
             const parsed: CandleData[] = raw.map((k: any) => ({
-              time: Number(k[0]),
-              open: parseFloat(k[1]),
-              high: parseFloat(k[2]),
-              low: parseFloat(k[3]),
-              close: parseFloat(k[4]),
-              volume: parseFloat(k[5]),
+              time: Number(k[0]) * 1000,
+              volume: parseFloat(k[1]) || 0,
+              close: parseFloat(k[2]),
+              high: parseFloat(k[3]),
+              low: parseFloat(k[4]),
+              open: parseFloat(k[5]),
             }));
             // Update last candle to match exact live market price
             parsed[parsed.length - 1].close = market.currentPrice;
@@ -125,7 +126,7 @@ export const RealMarketChart: React.FC<RealMarketChartProps> = ({ market }) => {
           }
         }
       } catch {
-        // Uses the generated timeframe dataset
+        // Fallback uses the generated timeframe dataset
       }
     };
 
