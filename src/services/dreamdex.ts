@@ -195,20 +195,35 @@ export async function fetchLiveCryptoPrices(): Promise<Record<string, LivePriceD
   }
 }
 
-/**
- * Compute strike price and dynamic binary probabilities from real spot prices
- */
 export function calculateStrikeAndProbability(currentPrice: number, asset: string) {
-  let strikeStep = 50;
-  if (asset === 'BTC') strikeStep = currentPrice > 50000 ? 100 : 50;
-  else if (asset === 'ETH') strikeStep = 10;
-  else if (asset === 'SOL') strikeStep = 1;
-  else if (asset === 'SOMNIA') strikeStep = 0.05;
-  else if (asset === 'SUI') strikeStep = 0.05;
-  else if (asset === 'DOGE') strikeStep = 0.005;
-  else if (asset === 'PEPE') strikeStep = 0.0000005;
+  // Volatility basis points tailored per asset to provide realistic prediction targets
+  let bps = 12; // 0.12%
+  if (asset === 'BTC') bps = 10;
+  else if (asset === 'ETH') bps = 15;
+  else if (asset === 'SOL') bps = 25;
+  else if (asset === 'SOMNIA' || asset === 'SUI') bps = 35;
+  else if (asset === 'DOGE') bps = 40;
+  else if (asset === 'PEPE') bps = 50;
 
-  const strikePrice = Math.round(currentPrice / strikeStep) * strikeStep;
+  const rawStrike = currentPrice * (1 + bps / 10000);
+  let strikePrice = rawStrike;
+
+  if (asset === 'BTC') {
+    strikePrice = Number((Math.round(rawStrike * 2) / 2).toFixed(2));
+  } else if (asset === 'ETH') {
+    strikePrice = Number((Math.round(rawStrike * 10) / 10).toFixed(2));
+  } else if (asset === 'SOL') {
+    strikePrice = Number((Math.round(rawStrike * 100) / 100).toFixed(2));
+  } else if (asset === 'SOMNIA' || asset === 'SUI') {
+    strikePrice = Number(rawStrike.toFixed(4));
+  } else if (asset === 'DOGE') {
+    strikePrice = Number(rawStrike.toFixed(5));
+  } else if (asset === 'PEPE') {
+    strikePrice = Number(rawStrike.toFixed(8));
+  } else {
+    strikePrice = Number(rawStrike.toFixed(2));
+  }
+
   const delta = currentPrice - strikePrice;
   const deltaPercent = delta / (currentPrice || 1);
 
