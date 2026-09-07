@@ -92,8 +92,8 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
   // Sync strike with live price only on open or token switch (prevents background polling from erasing user typed input)
   useEffect(() => {
     if (isOpen) {
-      const liveSquad = getLivePrice(squadAsset);
-      const livePublic = getLivePrice(publicAsset);
+      const liveSquad = Math.round(getLivePrice(squadAsset));
+      const livePublic = Math.round(getLivePrice(publicAsset));
       if (liveSquad > 0) setSquadStrike(liveSquad);
       if (livePublic > 0) setPublicStrike(livePublic);
     }

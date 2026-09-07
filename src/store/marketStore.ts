@@ -356,34 +356,7 @@ export const useMarketStore = create<MarketState>((set, get) => ({
 
   pollLiveMarketPrices: async () => {
     try {
-      const prices = await fetchLiveCryptoPrices();
-      
-      // First, check and roll over any expired rounds
-      get().checkAndRolloverMarkets(prices);
-
-      set((state) => {
-        const updated = state.markets.map((m) => {
-          const live = prices[m.underlyingAsset];
-          if (!live) return m;
-
-          const delta = live.price - m.strikePrice;
-          const deltaPct = delta / (live.price || 1);
-          const newUpProb = Math.min(Math.max(0.50 + deltaPct * 15, 0.12), 0.88);
-          const newDownProb = Number((1 - newUpProb).toFixed(2));
-
-          return {
-            ...m,
-            currentPrice: live.price,
-            change24h: live.change24h,
-            high24h: live.high24h,
-            low24h: live.low24h,
-            bestUpProbability: Number(newUpProb.toFixed(2)),
-            bestDownProbability: newDownProb,
-            lastUpdated: Date.now(),
-          };
-        });
-        return { markets: updated };
-      });
+      await livePriceStreamer.fetchRestPrices();
     } catch (err) {
       console.warn('[FLIP] Error polling live crypto prices:', err);
     }
