@@ -1,41 +1,73 @@
-# FLIP ⚡ — High-Velocity Consumer Prediction Protocol on Somnia
+<div align="center">
 
-> **Somnia × DreamDEX Event Contracts Submission**  
-> *Track: Event Contracts & Next-Gen Binary Trading*  
-> *Network: Somnia Shannon Testnet (`Chain ID: 50312`)*
+  <img src="./public/assets/flip_logo.png" alt="FLIP Logo" width="180" />
 
-FLIP is a consumer-grade, ultra-fast binary prediction market application built natively on **Somnia Shannon Testnet** and powered by **DreamDEX Event Contracts**. It transforms complex on-chain order books and parimutuel pools into a fluid, two-tap trading experience with frictionless Privy email onboarding, viral private squad challenges with sealed odds, and real-time sub-150ms spot price feeds.
+  # FLIP ⚡ — High-Velocity Consumer Prediction Protocol
+
+  [![Somnia Shannon](https://img.shields.io/badge/Somnia_Shannon_Testnet-Chain_ID_50312-00C278?style=flat&logo=ethereum&logoColor=white)](https://shannon-explorer.somnia.network)
+  [![DreamDEX](https://img.shields.io/badge/Powered_by-DreamDEX_Event_Contracts-111827?style=flat)](https://shannon-explorer.somnia.network)
+  [![TPS](https://img.shields.io/badge/Peak_Engine-400k+_TPS-F59E0B?style=flat)](https://somnia.network)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat)](./LICENSE)
+
+  <br />
+
+  <img src="./public/assets/flip_hero_banner.jpg" alt="FLIP Prediction Market Built For Everyone" width="100%" />
+
+  <br />
+  <br />
+
+  **Consumer-Grade Binary Trading Interface • Sealed-Odds Squad PvP Showdowns • Sub-150ms Exchange Feeds**
+
+  [Launch Terminal](https://github.com/OpeyemiMoses/Flip) • [Contract Directory](#-somnia-shannon-testnet-verified-contracts) • [Documentation](#-system-architecture) • [On-Chain Tests](#-on-chain-test-suites)
+
+</div>
 
 ---
 
-## 🌟 Key Innovations & Architecture
+## 📑 Table of Contents
+1. [Overview & Product Vision](#-overview--product-vision)
+2. [Key Innovations & Features](#-key-innovations--features)
+3. [Mathematical Model & Parimutuel Settlement](#-mathematical-model--parimutuel-settlement)
+4. [System Architecture](#-system-architecture)
+5. [Somnia Shannon Testnet Verified Contracts](#-somnia-shannon-testnet-verified-contracts)
+6. [Real-Time Zero-Latency Multi-Exchange Oracle](#-real-time-zero-latency-multi-exchange-oracle)
+7. [Quickstart & Local Setup](#-quickstart--local-setup)
+8. [On-Chain Test Suites](#-on-chain-test-suites)
+9. [Community & Repository Standards](#-community--repository-standards)
+
+---
+
+## ⚡ Overview & Product Vision
+
+FLIP is a next-generation consumer prediction protocol built natively on the **Somnia Shannon Testnet** (Chain ID `50312`) and powered by **DreamDEX Event Contracts**. 
+
+Traditional decentralized prediction markets suffer from slow block finality, high gas friction, illiquid orderbooks, and complex interfaces. FLIP solves this by pairing Somnia's **400,000+ TPS engine** and sub-second finality with a **2-tap binary trading interface**, frictionless **Privy embedded TSS wallets**, and **private sealed-odds squad showdowns** backed by deterministic on-chain parimutuel escrow.
+
+---
+
+## 🌟 Key Innovations & Features
 
 ### 1. 2-Tap Binary Trading Interface
-- **Complete Set Minting**: Converts \$1.00 tUSDC collateral into `1 UP + 1 DOWN` ERC-6909 outcome tokens via DreamDEX Event Contracts.
-- **Dynamic Implied Odds**: Pricing denominated in $10^6$ probability units ($900,000 = 90\% = \$0.90$).
-- **Instant Settlement**: Winning positions automatically redeem $1:1$ for tUSDC collateral upon round expiry.
+- **Complete Set Minting**: Deposits convert \$1.00 tUSDC collateral into `1 UP + 1 DOWN` ERC-6909 outcome tokens through DreamDEX Event Contracts.
+- **Dynamic Implied Odds**: Odds are priced in $10^6$ fixed-point precision units ($900,000 = 90\% = \$0.90$).
+- **Deterministic Settlement**: Winning contracts redeem $1:1$ for tUSDC collateral directly upon epoch expiry.
 
 ### 2. Private Squad PvP Challenges (Sealed Odds Mechanism)
-- **Anti-Bias Game Theory**: Players create private wagers (e.g., *BTC Breakout*) and share instant QR codes or room links.
-- **Sealed Odds**: Odds and side distribution remain **completely hidden** from all participants until timer expiry to prevent herd mentality and social bias.
-- **On-Chain Parimutuel Escrow**: Winners share the pooled deposits of the opposing side directly on Somnia Shannon net of standard **2% protocol & ecosystem fee**.
+- **Anti-Bias Game Theory**: Users create private peer-to-peer prediction battles and invite friends via instant share links or mobile QR codes.
+- **Sealed Odds**: Player picks and pool distributions remain **completely concealed** until expiry to prevent herd behavior and social bias.
+- **Parimutuel Escrow**: Winners claim the opposing side's deposits on-chain net of the standard **2% protocol & ecosystem fee**.
 
-### 3. Dynamic Rollover & Volatility-Tailored Strikes
-- **Clean Integer Strike Engine**: Strips artificial decimal fragments from prediction questions (e.g. `$79,483`, `$79,521`, `$2,492`, `$106`).
-- **Anchored Close Reference**: Automatically calculates the subsequent round target from the authentic closing spot price and momentum direction of the previous epoch.
+### 3. Dynamic Clean-Integer Rollover Engine
+- **Decimals Removed**: Prediction questions and strike targets are strictly denominated in clean integer prices (e.g., `$79,483`, `$79,521`, `$2,492`, `$106`).
+- **Anchored Volatility Drift**: Subsequent rounds calculate new resistance, momentum, or support targets directly from the previous round's authentic closing spot price.
 
-### 4. Zero-Latency Multi-Exchange Price Streaming (<150ms)
-- **High-Throughput Exchange Feeds**: Real-time spot prices streamed via Gate.io and Huobi/HTX global ticker engines with zero CORS issues and zero rate limits.
-- **Instant Settlement Oracle**: Direct REST settlement queries against spot market prices at the exact second of epoch expiration.
-
-### 5. Frictionless Privy Email OTP & Embedded TSS Wallets
-- **Web2 to Web3 Onboarding**: Users log in instantly via Email OTP with an auto-provisioned **Embedded Somnia Wallet**.
-- **Web3 Wallet Binding**: Connect and link MetaMask, Coinbase Wallet, Rabby, or Rainbow.
-- **Automated Network Switch**: Automatically configures and switches users to Somnia Shannon (`50312`).
+### 4. Frictionless Web2/Web3 Onboarding
+- **Privy Email OTP**: Instant non-custodial wallet provisioning with zero seed phrase friction.
+- **Web3 Connector**: Native support for MetaMask, Coinbase Wallet, Rabby, and Rainbow with automated network switching to Somnia Shannon (`50312`).
 
 ---
 
-## 📐 Mathematical Model & Settlement Specification
+## 📐 Mathematical Model & Parimutuel Settlement
 
 ### 1. Parimutuel Pool Equilibrium ($1.00 USDso Parity)
 Every binary market guarantees mathematical conservation of collateral:
@@ -54,6 +86,37 @@ $$\text{Winning Share Payout} = \frac{\text{Total Distributable Pot}}{\text{Tota
 
 ---
 
+## 🏗 System Architecture
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   FLIP CLIENT LAYER                                   │
+│    Next-Gen Binary Trading UI  •  Private Squad PvP Rooms  •  Community Market Mint    │
+└──────────────────┬─────────────────────────────────┬───────────────────────────────────┘
+                   │                                 │
+                   ▼                                 ▼
+┌─────────────────────────────────────┐   ┌──────────────────────────────────────────────┐
+│       PRIVY & WEB3 WALLET LAYER     │   │      ZERO-LATENCY EXCHANGE ORACLE ENGINE     │
+│ • Email OTP & Embedded TSS Wallet   │   │ • Gate.io Global Spot Ticker (Primary)       │
+│ • Web3 Connect (MetaMask, Rabby)    │   │ • Huobi/HTX Multi-Ticker Fallback (Priority2)│
+│ • Somnia Shannon Auto-Switch (50312)│   │ • Sub-150ms Spot Prices (BTC, ETH, SOL, etc.)│
+└──────────────────┬──────────────────┘   └──────────────────────┬───────────────────────┘
+                   │                                             │
+                   ▼                                             ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                      DREAMDEX EVENT CONTRACTS & SOMNIA SHANNON L1                      │
+│                                                                                        │
+│  • Binary Markets Module:   0x3ecC694Cef705358864a646142ac17A90E29e388                │
+│  • Markets Core & CLOB:     0x2802504314685D89bF6C992CA5a8e7cC78bc0294                │
+│  • Binary Settlement:       0xbF4a49e0Dfd092e5FBE8E5761064C49533e6Ed23                │
+│  • ERC-6909 Outcome Tokens: 0xB52c5934113Af5c0Bb20eb3C72290C8215f755b9                │
+│  • Collateral Router:       0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C                │
+│  • tUSDC Collateral Token:  0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E                │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## 📜 Somnia Shannon Testnet Verified Contracts
 
 | Contract Name | Contract Address | Explorer Link |
@@ -64,6 +127,15 @@ $$\text{Winning Share Payout} = \frac{\text{Total Distributable Pot}}{\text{Tota
 | **ERC-6909 Outcome Tokens** | `0xB52c5934113Af5c0Bb20eb3C72290C8215f755b9` | [Shannon Explorer](https://shannon-explorer.somnia.network/address/0xB52c5934113Af5c0Bb20eb3C72290C8215f755b9) |
 | **Collateral Router** | `0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C` | [Shannon Explorer](https://shannon-explorer.somnia.network/address/0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C) |
 | **tUSDC Collateral Token** | `0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E` | [Shannon Explorer](https://shannon-explorer.somnia.network/address/0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E) |
+
+---
+
+## ⚡ Real-Time Zero-Latency Multi-Exchange Oracle
+
+FLIP implements a resilient multi-exchange price pipeline:
+1. **Primary Feed (Gate.io Spot API)**: Fetches all supported pairs (`BTC_USDT`, `ETH_USDT`, `SOL_USDT`, `SUI_USDT`, `DOGE_USDT`, `PEPE_USDT`) in a single payload (<150ms latency, 0 rate limits).
+2. **Secondary Feed (Huobi/HTX Global Tickers)**: Instant fallback ensuring uninterrupted streaming worldwide.
+3. **Settlement Precision**: Direct oracle query executed at the exact second of epoch expiration.
 
 ---
 
@@ -80,7 +152,7 @@ cd Flip
 npm install
 ```
 
-### 3. Configure Environment Variables
+### 3. Configure Environment
 Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
@@ -120,7 +192,7 @@ npm run build
 
 ---
 
-## 📂 Repository Standards & Community
+## 📂 Community & Repository Standards
 
 - **[Code of Conduct](./CODE_OF_CONDUCT.md)**: Community standards and harassment-free pledge.
 - **[Contributing Guidelines](./CONTRIBUTING.md)**: Development workflow, design constraints, and PR submission process.
