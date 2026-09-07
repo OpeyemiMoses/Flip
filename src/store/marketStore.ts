@@ -336,7 +336,7 @@ export const useMarketStore = create<MarketState>((set, get) => ({
           lastClosePrice: livePrice,
           previousRoundWinningOutcome: winningSide,
           roundNumber: newRoundNum,
-          description: `Will ${m.underlyingAsset} finish above $${nextStrike.toLocaleString()} USD? Anchored to Round #${newRoundNum - 1} close ($${livePrice.toLocaleString()} ${winningSide}). Resolves via DreamDEX TWAP.`,
+          description: `Will ${m.underlyingAsset} finish above $${nextStrike.toLocaleString()} USD? Resolves via DreamDEX TWAP.`,
           expiryDate: nextExpiryDate,
           expiryTimestampNs: BigInt(nextExpiryDate.getTime()) * 1_000_000n,
           bestUpProbability: nextUpProb,

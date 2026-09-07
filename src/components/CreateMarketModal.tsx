@@ -260,10 +260,7 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
           Math.floor(Math.random() * 16).toString(16)
         ).join('')}`,
         title: marketTitle,
-        description: `Will ${publicAsset} settle above $${Number(publicStrike).toLocaleString()} USD at expiry? Created by ${userAddress.slice(
-          0,
-          6
-        )}...${userAddress.slice(-4)}.`,
+        description: `Will ${publicAsset} finish above $${Number(publicStrike).toLocaleString()} USD? Resolves via DreamDEX TWAP.`,
         underlyingAsset: publicAsset,
         symbol: `${publicAsset}USDT`,
         strikePrice: Number(publicStrike),
