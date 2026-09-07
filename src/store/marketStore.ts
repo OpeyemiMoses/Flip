@@ -424,7 +424,7 @@ export const useMarketStore = create<MarketState>((set, get) => ({
         if (get().userAddress) {
           get().refreshBalances();
         }
-      }, 5000);
+      }, 1500);
     }
   },
 

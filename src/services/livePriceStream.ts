@@ -63,11 +63,11 @@ class LivePriceStreamer {
   public init() {
     this.fetchRestPrices();
 
-    // Regular CoinGecko polling strictly every 4 seconds
+    // High-frequency live price streaming every 1.5 seconds
     if (!this.restPollTimer) {
       this.restPollTimer = setInterval(() => {
         this.fetchRestPrices();
-      }, 4000);
+      }, 1500);
     }
   }
 
@@ -77,7 +77,7 @@ class LivePriceStreamer {
     // 1. Primary #1: CoinGecko Simple Price & 24h Data API
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
 
       const res = await fetch(
         'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,sui,dogecoin,pepe&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true',
