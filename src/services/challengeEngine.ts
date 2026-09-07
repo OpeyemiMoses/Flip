@@ -164,12 +164,13 @@ export class ChallengeEngine {
     const feeRate = 0.02; // 2% FLIP Protocol fee
 
     if (winners.length === challenge.participants.length) {
-      // Scenario A: Everyone won unanimously -> All deposits returned + 100% win share
+      // Scenario A: Everyone won unanimously -> Deposits paid out net of 2% protocol & ecosystem fee
       challenge.resolutionType = 'UNANIMOUS_WIN';
-      challenge.protocolFeeUSD = 0;
+      const protocolFee = totalPot * feeRate;
+      challenge.protocolFeeUSD = protocolFee;
       challenge.ecosystemFeeUSD = 0;
       for (const p of challenge.participants) {
-        p.payoutUSD = p.amountUSD;
+        p.payoutUSD = Number((p.amountUSD * (1 - feeRate)).toFixed(4));
       }
     } else if (losers.length === challenge.participants.length) {
       // Scenario B: Everyone lost unanimously -> Pot routes to DreamDEX Ecosystem + 2% Protocol fee

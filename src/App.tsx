@@ -1399,7 +1399,7 @@ export default function App() {
                 lineHeight: 1.6,
               }}
             >
-              Battle your friends and trading group in private peer-to-peer prediction showdowns. Generate shareable room links, scan instant QR codes on mobile, pool entry fees in tUSDC, and split the winning pot parimutuelly with 0% platform take.
+              Battle your friends and trading group in private peer-to-peer prediction showdowns. Generate shareable room links, scan instant QR codes on mobile, pool entry fees in tUSDC, and split the winning pot parimutuelly with standard 2% protocol & ecosystem fee.
             </p>
           </div>
 

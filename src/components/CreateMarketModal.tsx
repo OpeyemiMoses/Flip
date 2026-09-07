@@ -950,9 +950,9 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                       <ShieldCheck size={14} color="var(--color-green)" />
                       <span>On-Chain Parimutuel Settlement Rules:</span>
                     </div>
-                    <div>• If all squad members win: 100% of deposits are paid out.</div>
+                    <div>• If all squad members win: Deposits are paid out net of 2% protocol & ecosystem fee.</div>
                     <div>• If all lose: Pot flows into DreamDEX ecosystem + 2% protocol fee.</div>
-                    <div>• If mixed: Losers' pot is shared among winners based on their stake.</div>
+                    <div>• If mixed: Losers' pot is shared among winners based on their stake (minus 2% protocol fee).</div>
                   </div>
 
                   <button
