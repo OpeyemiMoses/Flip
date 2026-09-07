@@ -23,15 +23,35 @@ export function useMarkets() {
       const now = Date.now();
       const diffMs = Math.max(0, expiry - now);
 
-      const mins = Math.floor(diffMs / 60000);
-      const secs = Math.floor((diffMs % 60000) / 1000);
+      if (diffMs <= 0) {
+        setTimeRemaining('Resolving...');
+        setProgressPercent(0);
+        return;
+      }
 
-      setTimeRemaining(
-        `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-      );
+      const totalSecs = Math.floor(diffMs / 1000);
+      const days = Math.floor(totalSecs / 86400);
+      const hours = Math.floor((totalSecs % 86400) / 3600);
+      const mins = Math.floor((totalSecs % 3600) / 60);
+      const secs = totalSecs % 60;
 
-      // Total 15m window assumed for progress calculation
-      const totalWindowMs = 15 * 60 * 1000;
+      if (days > 0) {
+        setTimeRemaining(`${days}d ${hours}h ${mins}m`);
+      } else if (hours > 0) {
+        setTimeRemaining(
+          `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+        );
+      } else {
+        setTimeRemaining(
+          `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+        );
+      }
+
+      const totalWindowMs = selectedMarket.marketId.includes('1h')
+        ? 60 * 60 * 1000
+        : selectedMarket.marketId.includes('4h')
+        ? 4 * 60 * 60 * 1000
+        : 15 * 60 * 1000;
       const progress = Math.min(Math.max((diffMs / totalWindowMs) * 100, 0), 100);
       setProgressPercent(progress);
     }, 1000);

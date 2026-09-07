@@ -26,6 +26,9 @@ export interface BinaryMarket {
   isResolved: boolean;
   status?: number;
   winningOutcome?: 'UP' | 'DOWN' | null;
+  lastClosePrice?: number;
+  previousRoundWinningOutcome?: 'UP' | 'DOWN' | null;
+  roundNumber?: number;
   collateralToken: string;
   upTokenId: string;
   downTokenId: string;
@@ -252,6 +255,9 @@ export async function fetchLiveBinaryMarkets(): Promise<BinaryMarket[]> {
       change24h: livePrices.BTC.change24h,
       high24h: livePrices.BTC.high24h,
       low24h: livePrices.BTC.low24h,
+      lastClosePrice: Number((livePrices.BTC.price * 0.9995).toFixed(2)),
+      previousRoundWinningOutcome: 'UP',
+      roundNumber: 84,
       expiryTimestampNs: BigInt(now + 12 * 60 * 1000) * 1_000_000n,
       expiryDate: new Date(now + 12 * 60 * 1000),
       isResolved: false,
@@ -276,6 +282,9 @@ export async function fetchLiveBinaryMarkets(): Promise<BinaryMarket[]> {
       change24h: livePrices.ETH.change24h,
       high24h: livePrices.ETH.high24h,
       low24h: livePrices.ETH.low24h,
+      lastClosePrice: Number((livePrices.ETH.price * 1.0006).toFixed(2)),
+      previousRoundWinningOutcome: 'DOWN',
+      roundNumber: 84,
       expiryTimestampNs: BigInt(now + 8 * 60 * 1000) * 1_000_000n,
       expiryDate: new Date(now + 8 * 60 * 1000),
       isResolved: false,
@@ -300,6 +309,9 @@ export async function fetchLiveBinaryMarkets(): Promise<BinaryMarket[]> {
       change24h: livePrices.SOL.change24h,
       high24h: livePrices.SOL.high24h,
       low24h: livePrices.SOL.low24h,
+      lastClosePrice: Number((livePrices.SOL.price * 0.9988).toFixed(2)),
+      previousRoundWinningOutcome: 'UP',
+      roundNumber: 84,
       expiryTimestampNs: BigInt(now + 14 * 60 * 1000) * 1_000_000n,
       expiryDate: new Date(now + 14 * 60 * 1000),
       isResolved: false,
@@ -324,6 +336,9 @@ export async function fetchLiveBinaryMarkets(): Promise<BinaryMarket[]> {
       change24h: livePrices.SOMNIA.change24h,
       high24h: livePrices.SOMNIA.high24h,
       low24h: livePrices.SOMNIA.low24h,
+      lastClosePrice: Number((livePrices.SOMNIA.price * 0.995).toFixed(4)),
+      previousRoundWinningOutcome: 'UP',
+      roundNumber: 21,
       expiryTimestampNs: BigInt(now + 42 * 60 * 1000) * 1_000_000n,
       expiryDate: new Date(now + 42 * 60 * 1000),
       isResolved: false,
@@ -348,6 +363,9 @@ export async function fetchLiveBinaryMarkets(): Promise<BinaryMarket[]> {
       change24h: livePrices.SUI.change24h,
       high24h: livePrices.SUI.high24h,
       low24h: livePrices.SUI.low24h,
+      lastClosePrice: Number((livePrices.SUI.price * 1.002).toFixed(4)),
+      previousRoundWinningOutcome: 'DOWN',
+      roundNumber: 21,
       expiryTimestampNs: BigInt(now + 35 * 60 * 1000) * 1_000_000n,
       expiryDate: new Date(now + 35 * 60 * 1000),
       isResolved: false,

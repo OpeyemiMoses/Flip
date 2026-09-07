@@ -151,20 +151,52 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
     return [...markets, ...userCreatedMarkets];
   }, [markets, userCreatedMarkets]);
 
-  // Live countdown timer
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const now = new Date();
-      const seconds = 59 - now.getSeconds();
-      const mins = 4 - (now.getMinutes() % 5);
-      setTimeRemaining(`${mins.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
   const selectedMarket: BinaryMarket | undefined = useMemo(() => {
     return allMarkets.find((m) => m.marketId === selectedMarketId) || allMarkets[0] || markets[0];
   }, [allMarkets, markets, selectedMarketId]);
+
+  // Live countdown timer synced accurately to the selected market's true expiry timestamp
+  useEffect(() => {
+    const updateCountdown = () => {
+      if (!selectedMarket) {
+        setTimeRemaining('15:00');
+        return;
+      }
+      const now = Date.now();
+      const expiry =
+        selectedMarket.expiryDate instanceof Date
+          ? selectedMarket.expiryDate.getTime()
+          : new Date(selectedMarket.expiryDate || now).getTime();
+      const diffMs = Math.max(0, expiry - now);
+
+      if (diffMs <= 0) {
+        setTimeRemaining('Resolving...');
+        return;
+      }
+
+      const totalSecs = Math.floor(diffMs / 1000);
+      const days = Math.floor(totalSecs / 86400);
+      const hours = Math.floor((totalSecs % 86400) / 3600);
+      const mins = Math.floor((totalSecs % 3600) / 60);
+      const secs = totalSecs % 60;
+
+      if (days > 0) {
+        setTimeRemaining(`${days}d ${hours}h ${mins}m`);
+      } else if (hours > 0) {
+        setTimeRemaining(
+          `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+        );
+      } else {
+        setTimeRemaining(
+          `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+        );
+      }
+    };
+
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [selectedMarket]);
 
   // Filtered positions for unified Activity page (strictly tied to active session wallet)
   const filteredActivityPositions = useMemo(() => {
@@ -1091,6 +1123,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                       <div className="font-terminal" style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-black)' }}>
                         ${selectedMarket?.strikePrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </div>
+                      {selectedMarket?.lastClosePrice && (
+                        <div className="font-terminal" style={{ fontSize: '0.72rem', color: '#6B7280', marginTop: '0.25rem' }}>
+                          Prev Close Anchor: <span style={{ fontWeight: 700, color: selectedMarket.previousRoundWinningOutcome === 'UP' ? 'var(--color-green)' : 'var(--color-red)' }}>${selectedMarket.lastClosePrice.toLocaleString()} ({selectedMarket.previousRoundWinningOutcome || 'SETTLED'})</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 

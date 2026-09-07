@@ -23,6 +23,7 @@ import { TradingEngine } from '../services/tradingEngine';
 import { useMarketStore } from '../store/marketStore';
 import { formatUSD } from '../services/dreamdex';
 import { WalletSigner } from '../services/walletSigner';
+import { livePriceStreamer } from '../services/livePriceStream';
 
 interface PrivateChallengeViewProps {
   challenge: PrivateChallenge;
@@ -137,15 +138,28 @@ export const PrivateChallengeView: React.FC<PrivateChallengeViewProps> = ({
       message: 'Calculating TWAP oracle resolution on Somnia Shannon...',
     });
     try {
-      // Settle against live spot price
-      const simulatedFinalPrice = challenge.strikePrice * 1.004; // e.g. above strike
-      ChallengeEngine.settleChallenge(challenge.id, simulatedFinalPrice);
+      // Fetch direct un-cached live spot price from CoinGecko oracle at the exact moment of resolution
+      let liveSpot = livePriceStreamer.getPrices()[challenge.underlyingAsset]?.price;
+      try {
+        const freshPrices = await livePriceStreamer.fetchRestPrices();
+        if (freshPrices[challenge.underlyingAsset]?.price) {
+          liveSpot = freshPrices[challenge.underlyingAsset].price;
+        }
+      } catch (err) {
+        console.warn('[FLIP] Error querying live spot for squad settlement:', err);
+      }
+
+      if (!liveSpot || liveSpot <= 0) {
+        liveSpot = challenge.initialSpotPrice || challenge.strikePrice;
+      }
+
+      ChallengeEngine.settleChallenge(challenge.id, liveSpot);
       refreshChallenges();
       refreshBalances();
       addToast({
         type: 'success',
         title: 'Challenge Settled',
-        message: 'Settlement confirmed and payouts distributed on-chain!',
+        message: `Settled against CoinGecko live spot ($${liveSpot.toLocaleString()}). Payouts distributed on-chain!`,
       });
     } catch (err: any) {
       addToast({

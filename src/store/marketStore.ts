@@ -205,11 +205,31 @@ export const useMarketStore = create<MarketState>((set, get) => ({
     set({ privateChallenges: stored });
   },
 
-  checkAndRolloverMarkets: (currentPrices?: Record<string, any>) => {
+  checkAndRolloverMarkets: async (currentPrices?: Record<string, any>) => {
     const now = Date.now();
     const state = get();
-    let marketsUpdated = false;
 
+    // Check if any market has reached expiry
+    const hasExpiredMarket = state.markets.some((m) => {
+      const expiryMs =
+        m.expiryDate instanceof Date
+          ? m.expiryDate.getTime()
+          : new Date(m.expiryDate || now).getTime();
+      return now >= expiryMs && !m.isResolved;
+    });
+
+    // If resolving, fetch fresh un-cached direct live spot prices from CoinGecko oracle at this exact second
+    let freshOraclePrices: Record<string, any> = currentPrices || {};
+    if (hasExpiredMarket) {
+      try {
+        freshOraclePrices = await livePriceStreamer.fetchRestPrices();
+      } catch (err) {
+        console.warn('[FLIP] Direct oracle query fallback at resolution:', err);
+        freshOraclePrices = livePriceStreamer.getPrices();
+      }
+    }
+
+    let marketsUpdated = false;
     const updatedMarkets = state.markets.map((m) => {
       const expiryMs =
         m.expiryDate instanceof Date
@@ -219,7 +239,12 @@ export const useMarketStore = create<MarketState>((set, get) => ({
       // Check if round has expired
       if (now >= expiryMs) {
         marketsUpdated = true;
-        const livePrice = currentPrices?.[m.underlyingAsset]?.price || m.currentPrice;
+        // MUST use fresh oracle price directly at resolution moment, NOT cached on-screen prices
+        const livePrice =
+          freshOraclePrices[m.underlyingAsset]?.price ||
+          livePriceStreamer.getPrices()[m.underlyingAsset]?.price ||
+          m.currentPrice;
+
         const winningSide: 'UP' | 'DOWN' = livePrice >= m.strikePrice ? 'UP' : 'DOWN';
 
         // 1. Settle open user positions for this market
@@ -233,28 +258,41 @@ export const useMarketStore = create<MarketState>((set, get) => ({
           });
         }
 
-        // 2. Spawn the NEXT round with a fresh strike anchored to current spot price
+        // 2. Spawn the NEXT round with a fresh strike anchored to the previous closing price & current spot
         const isOneHour = m.marketId.includes('1h');
         const nextDurationMs = isOneHour ? 60 * 60 * 1000 : 15 * 60 * 1000;
         const nextExpiryDate = new Date(now + nextDurationMs);
 
-        // Dynamically compute next strike price and initial probabilities
+        // Dynamically compute next strike price and initial probabilities based on closing price
         let strikeStep = 50;
         if (m.underlyingAsset === 'BTC') strikeStep = livePrice > 50000 ? 100 : 50;
         else if (m.underlyingAsset === 'ETH') strikeStep = 10;
         else if (m.underlyingAsset === 'SOL') strikeStep = 1;
         else if (m.underlyingAsset === 'SOMNIA' || m.underlyingAsset === 'SUI') strikeStep = 0.05;
+        else if (m.underlyingAsset === 'DOGE') strikeStep = 0.005;
+        else if (m.underlyingAsset === 'PEPE') strikeStep = 0.0000005;
 
-        const nextStrike = Math.round(livePrice / strikeStep) * strikeStep;
+        // Calculate next strike anchored strictly to the closing price of the previous round
+        let nextStrike = Math.round(livePrice / strikeStep) * strikeStep;
+        if (nextStrike === m.strikePrice || Math.abs(nextStrike - livePrice) < strikeStep * 0.2) {
+          // If close was UP, anchor next target to upper resistance step; if DOWN, anchor to lower support
+          nextStrike = winningSide === 'UP' ? nextStrike + strikeStep : Math.max(nextStrike - strikeStep, strikeStep);
+        }
+
         const delta = livePrice - nextStrike;
         const deltaPct = delta / (livePrice || 1);
         const nextUpProb = Number(Math.min(Math.max(0.50 + deltaPct * 15, 0.15), 0.85).toFixed(2));
         const nextDownProb = Number((1 - nextUpProb).toFixed(2));
+        const newRoundNum = (m.roundNumber || 1) + 1;
 
         return {
           ...m,
           strikePrice: nextStrike,
           currentPrice: livePrice,
+          lastClosePrice: livePrice,
+          previousRoundWinningOutcome: winningSide,
+          roundNumber: newRoundNum,
+          description: `Will ${m.underlyingAsset} finish above $${nextStrike.toLocaleString()} USD? Anchored to Round #${newRoundNum - 1} close ($${livePrice.toLocaleString()} ${winningSide}). Resolves via DreamDEX TWAP.`,
           expiryDate: nextExpiryDate,
           expiryTimestampNs: BigInt(nextExpiryDate.getTime()) * 1_000_000n,
           bestUpProbability: nextUpProb,

@@ -721,19 +721,37 @@ footer a:hover,
 }
 
 /* ========================================================================= */
-/* Comprehensive Page & Tab Rise-In + Scroll-Reveal Animation Engine         */
+/* Comprehensive Page & Tab Rise-In + Spring Pop-In Animation Engine         */
 /* ========================================================================= */
+
+@keyframes elementPopIn {
+  0% {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translateY(24px) scale(0.96);
+  }
+  65% {
+    opacity: 1;
+    filter: blur(0px);
+    transform: translateY(-3px) scale(1.012);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0px);
+    transform: translateY(0) scale(1);
+  }
+}
 
 @keyframes pageRiseIn {
   0% {
     opacity: 0;
-    filter: blur(8px);
+    filter: blur(10px);
     transform: translateY(28px) scale(0.97);
   }
-  60% {
+  65% {
     opacity: 1;
     filter: blur(0px);
-    transform: translateY(-4px) scale(1.004);
+    transform: translateY(-4px) scale(1.008);
   }
   100% {
     opacity: 1;
@@ -745,13 +763,13 @@ footer a:hover,
 @keyframes tabRisePop {
   0% {
     opacity: 0;
-    filter: blur(6px);
+    filter: blur(8px);
     transform: translateY(20px) scale(0.98);
   }
   70% {
     opacity: 1;
     filter: blur(0px);
-    transform: translateY(-2px) scale(1.002);
+    transform: translateY(-2px) scale(1.005);
   }
   100% {
     opacity: 1;
@@ -781,8 +799,13 @@ footer a:hover,
 @keyframes springBlurPop {
   0% {
     opacity: 0;
-    filter: blur(8px);
-    transform: translateY(24px) scale(0.96);
+    filter: blur(10px);
+    transform: translateY(26px) scale(0.95);
+  }
+  65% {
+    opacity: 1;
+    filter: blur(0px);
+    transform: translateY(-3px) scale(1.015);
   }
   100% {
     opacity: 1;
@@ -817,7 +840,7 @@ footer a:hover,
   backface-visibility: hidden;
 }
 
-/* Staggered Children inside Tab / Page containers */
+/* Automatic Staggered Children inside Tab / Page containers */
 .page-rise-in > *:nth-child(1), .tab-content-rise > *:nth-child(1) { animation-delay: 0.02s; }
 .page-rise-in > *:nth-child(2), .tab-content-rise > *:nth-child(2) { animation-delay: 0.06s; }
 .page-rise-in > *:nth-child(3), .tab-content-rise > *:nth-child(3) { animation-delay: 0.10s; }
@@ -873,30 +896,30 @@ footer a:hover,
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.08);
 }
 
-/* Stagger delays */
-.reveal-delay-1 {
-  animation-delay: 0.08s;
-  transition-delay: 0.08s;
+/* Explicit Stagger Delays */
+.reveal-delay-1, .stagger-1 {
+  animation-delay: 0.08s !important;
+  transition-delay: 0.08s !important;
 }
 
-.reveal-delay-2 {
-  animation-delay: 0.16s;
-  transition-delay: 0.16s;
+.reveal-delay-2, .stagger-2 {
+  animation-delay: 0.16s !important;
+  transition-delay: 0.16s !important;
 }
 
-.reveal-delay-3 {
-  animation-delay: 0.24s;
-  transition-delay: 0.24s;
+.reveal-delay-3, .stagger-3 {
+  animation-delay: 0.24s !important;
+  transition-delay: 0.24s !important;
 }
 
-.reveal-delay-4 {
-  animation-delay: 0.32s;
-  transition-delay: 0.32s;
+.reveal-delay-4, .stagger-4 {
+  animation-delay: 0.32s !important;
+  transition-delay: 0.32s !important;
 }
 
-.reveal-delay-5 {
-  animation-delay: 0.40s;
-  transition-delay: 0.40s;
+.reveal-delay-5, .stagger-5 {
+  animation-delay: 0.40s !important;
+  transition-delay: 0.40s !important;
 }
 
 ::-webkit-scrollbar {

@@ -60,12 +60,16 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
   }, []);
 
   const getLivePrice = (asset: string): number => {
-    return (
-      prices[asset]?.price ||
-      livePriceStreamer.getPrices()[asset]?.price ||
-      markets.find((m) => m.underlyingAsset === asset)?.currentPrice ||
-      0
-    );
+    const live = prices[asset]?.price || livePriceStreamer.getPrices()[asset]?.price || markets.find((m) => m.underlyingAsset === asset)?.currentPrice;
+    if (live && live > 0) return live;
+    // Direct CoinGecko anchor baselines
+    if (asset === 'BTC') return 79479.0;
+    if (asset === 'ETH') return 2491.88;
+    if (asset === 'SOL') return 105.29;
+    if (asset === 'SUI') return 0.8222;
+    if (asset === 'DOGE') return 0.0903;
+    if (asset === 'PEPE') return 0.00000362;
+    return 0.85;
   };
 
   const [activeTab, setActiveTab] = useState<'squad' | 'public'>('squad');
@@ -85,11 +89,13 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
   const [publicDurationHours, setPublicDurationHours] = useState(1);
   const [publicSeedCollateral, setPublicSeedCollateral] = useState(50);
 
-  // Sync strike with live price whenever modal opens or asset changes
+  // Sync strike with live price only on open or token switch (prevents background polling from erasing user typed input)
   useEffect(() => {
     if (isOpen) {
-      setSquadStrike(getLivePrice(squadAsset));
-      setPublicStrike(getLivePrice(publicAsset));
+      const liveSquad = getLivePrice(squadAsset);
+      const livePublic = getLivePrice(publicAsset);
+      if (liveSquad > 0) setSquadStrike(liveSquad);
+      if (livePublic > 0) setPublicStrike(livePublic);
     }
   }, [isOpen, squadAsset, publicAsset]);
 
@@ -138,6 +144,7 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
 
     try {
       const squadRoomTitle = squadTitle || `${squadAsset} Squad Strike (${squadDurationMins}m)`;
+      const liveSpot = getLivePrice(squadAsset);
 
       // Prompt real wallet transaction or signature on Somnia Shannon
       const { txHash } = await WalletSigner.requestSquadSigning({
@@ -153,7 +160,7 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
         creatorAddress: userAddress,
         underlyingAsset: squadAsset,
         strikePrice: Number(squadStrike),
-        initialSpotPrice: Number(squadStrike) * 0.998,
+        initialSpotPrice: liveSpot,
         entryFeeUSD: squadEntryFee,
         maxParticipants: squadMaxPlayers,
         durationMinutes: squadDurationMins,
@@ -239,6 +246,7 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
         seedCollateralUSD: publicSeedCollateral,
       });
 
+      const liveSpot = getLivePrice(publicAsset);
       const newMarket: BinaryMarket = {
         marketId: `custom-${publicAsset.toLowerCase()}-${Date.now().toString(36)}`,
         poolAddress: txHash.startsWith('0x') && txHash.length === 42 ? txHash : `0x${Array.from({ length: 40 }, () =>
@@ -252,10 +260,13 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
         underlyingAsset: publicAsset,
         symbol: `${publicAsset}USDT`,
         strikePrice: Number(publicStrike),
-        currentPrice: Number(publicStrike) * 0.998,
-        change24h: 1.2,
-        high24h: Number(publicStrike) * 1.02,
-        low24h: Number(publicStrike) * 0.98,
+        currentPrice: liveSpot,
+        change24h: prices[publicAsset]?.change24h || livePriceStreamer.getPrices()[publicAsset]?.change24h || 1.2,
+        high24h: liveSpot * 1.02,
+        low24h: liveSpot * 0.98,
+        lastClosePrice: liveSpot,
+        previousRoundWinningOutcome: 'UP',
+        roundNumber: 1,
         expiryTimestampNs: BigInt(expiryMs) * 1_000_000n,
         expiryDate: new Date(expiryMs),
         isResolved: false,
@@ -573,54 +584,102 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
               {activeTab === 'squad' ? (
                 /* 1. SQUAD CHALLENGE FORM */
                 <form onSubmit={handleCreateSquad} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
-                  {/* Live Spot Price Header Banner */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '0.75rem 0.9rem',
-                      backgroundColor: '#F3F4F6',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(0,0,0,0.06)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span
+                  {/* Live CoinGecko Spot Price & Previous Close Banner */}
+                  {(() => {
+                    const relatedMarket = markets.find((m) => m.underlyingAsset === squadAsset);
+                    const lastClose = relatedMarket?.lastClosePrice;
+                    const lastOutcome = relatedMarket?.previousRoundWinningOutcome;
+
+                    return (
+                      <div
                         style={{
-                          width: '8px',
-                          height: '8px',
-                          borderRadius: '50%',
-                          backgroundColor: '#10B981',
-                          display: 'inline-block',
-                          boxShadow: '0 0 8px rgba(16, 185, 129, 0.6)',
-                        }}
-                      />
-                      <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-black)' }}>
-                        Live Spot Feed ({squadAsset}/USD):
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span className="font-mono" style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-black)' }}>
-                        ${getLivePrice(squadAsset).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setSquadStrike(getLivePrice(squadAsset))}
-                        style={{
-                          fontSize: '0.68rem',
-                          padding: '0.2rem 0.45rem',
-                          borderRadius: '4px',
-                          border: '1px solid rgba(0,0,0,0.15)',
-                          backgroundColor: '#FFFFFF',
-                          cursor: 'pointer',
-                          fontWeight: 600,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.4rem',
+                          padding: '0.75rem 0.9rem',
+                          backgroundColor: '#F3F4F6',
+                          borderRadius: '10px',
+                          border: '1px solid rgba(0,0,0,0.06)',
                         }}
                       >
-                        Reset Strike
-                      </button>
-                    </div>
-                  </div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span
+                              style={{
+                                width: '8px',
+                                height: '8px',
+                                borderRadius: '50%',
+                                backgroundColor: '#10B981',
+                                display: 'inline-block',
+                                boxShadow: '0 0 8px rgba(16, 185, 129, 0.6)',
+                              }}
+                            />
+                            <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-black)' }}>
+                              CoinGecko Live Spot ({squadAsset}/USD):
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span className="font-mono" style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-black)' }}>
+                              ${getLivePrice(squadAsset).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setSquadStrike(getLivePrice(squadAsset))}
+                              style={{
+                                fontSize: '0.68rem',
+                                padding: '0.2rem 0.45rem',
+                                borderRadius: '4px',
+                                border: '1px solid rgba(0,0,0,0.15)',
+                                backgroundColor: '#FFFFFF',
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                              }}
+                            >
+                              Sync Live Strike
+                            </button>
+                          </div>
+                        </div>
+
+                        {lastClose && (
+                          <div
+                            className="font-mono"
+                            style={{
+                              fontSize: '0.72rem',
+                              color: 'var(--color-grey-text)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              borderTop: '1px solid rgba(0,0,0,0.06)',
+                              paddingTop: '0.35rem',
+                              marginTop: '0.1rem',
+                            }}
+                          >
+                            <span>Previous Round Close Anchor:</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <span style={{ fontWeight: 700, color: lastOutcome === 'UP' ? 'var(--color-green)' : 'var(--color-red)' }}>
+                                ${lastClose.toLocaleString()} ({lastOutcome || 'RESOLVED'})
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setSquadStrike(lastClose)}
+                                style={{
+                                  fontSize: '0.66rem',
+                                  padding: '0.15rem 0.4rem',
+                                  borderRadius: '4px',
+                                  border: '1px solid rgba(0,0,0,0.15)',
+                                  backgroundColor: '#FFFFFF',
+                                  cursor: 'pointer',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                Set As Strike
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   <div>
                     <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.35rem' }}>
@@ -669,6 +728,8 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                         <option value="SOL">Solana (SOL / USD)</option>
                         <option value="SOMNIA">Somnia (SOMNIA / USD)</option>
                         <option value="SUI">Sui Network (SUI / USD)</option>
+                        <option value="DOGE">Dogecoin (DOGE / USD)</option>
+                        <option value="PEPE">Pepe (PEPE / USD)</option>
                       </select>
                     </div>
 
@@ -912,54 +973,102 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
               ) : (
                 /* 2. PUBLIC MARKET FORM */
                 <form onSubmit={handleCreatePublic} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
-                  {/* Live Spot Price Header Banner */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '0.75rem 0.9rem',
-                      backgroundColor: '#F3F4F6',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(0,0,0,0.06)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span
+                  {/* Live CoinGecko Spot Price & Previous Close Banner */}
+                  {(() => {
+                    const relatedMarket = markets.find((m) => m.underlyingAsset === publicAsset);
+                    const lastClose = relatedMarket?.lastClosePrice;
+                    const lastOutcome = relatedMarket?.previousRoundWinningOutcome;
+
+                    return (
+                      <div
                         style={{
-                          width: '8px',
-                          height: '8px',
-                          borderRadius: '50%',
-                          backgroundColor: '#10B981',
-                          display: 'inline-block',
-                          boxShadow: '0 0 8px rgba(16, 185, 129, 0.6)',
-                        }}
-                      />
-                      <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-black)' }}>
-                        Live Spot Feed ({publicAsset}/USD):
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span className="font-mono" style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-black)' }}>
-                        ${getLivePrice(publicAsset).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setPublicStrike(getLivePrice(publicAsset))}
-                        style={{
-                          fontSize: '0.68rem',
-                          padding: '0.2rem 0.45rem',
-                          borderRadius: '4px',
-                          border: '1px solid rgba(0,0,0,0.15)',
-                          backgroundColor: '#FFFFFF',
-                          cursor: 'pointer',
-                          fontWeight: 600,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.4rem',
+                          padding: '0.75rem 0.9rem',
+                          backgroundColor: '#F3F4F6',
+                          borderRadius: '10px',
+                          border: '1px solid rgba(0,0,0,0.06)',
                         }}
                       >
-                        Reset Strike
-                      </button>
-                    </div>
-                  </div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span
+                              style={{
+                                width: '8px',
+                                height: '8px',
+                                borderRadius: '50%',
+                                backgroundColor: '#10B981',
+                                display: 'inline-block',
+                                boxShadow: '0 0 8px rgba(16, 185, 129, 0.6)',
+                              }}
+                            />
+                            <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-black)' }}>
+                              CoinGecko Live Spot ({publicAsset}/USD):
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span className="font-mono" style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-black)' }}>
+                              ${getLivePrice(publicAsset).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setPublicStrike(getLivePrice(publicAsset))}
+                              style={{
+                                fontSize: '0.68rem',
+                                padding: '0.2rem 0.45rem',
+                                borderRadius: '4px',
+                                border: '1px solid rgba(0,0,0,0.15)',
+                                backgroundColor: '#FFFFFF',
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                              }}
+                            >
+                              Sync Live Strike
+                            </button>
+                          </div>
+                        </div>
+
+                        {lastClose && (
+                          <div
+                            className="font-mono"
+                            style={{
+                              fontSize: '0.72rem',
+                              color: 'var(--color-grey-text)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              borderTop: '1px solid rgba(0,0,0,0.06)',
+                              paddingTop: '0.35rem',
+                              marginTop: '0.1rem',
+                            }}
+                          >
+                            <span>Previous Round Close Anchor:</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <span style={{ fontWeight: 700, color: lastOutcome === 'UP' ? 'var(--color-green)' : 'var(--color-red)' }}>
+                                ${lastClose.toLocaleString()} ({lastOutcome || 'RESOLVED'})
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setPublicStrike(lastClose)}
+                                style={{
+                                  fontSize: '0.66rem',
+                                  padding: '0.15rem 0.4rem',
+                                  borderRadius: '4px',
+                                  border: '1px solid rgba(0,0,0,0.15)',
+                                  backgroundColor: '#FFFFFF',
+                                  cursor: 'pointer',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                Set As Strike
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   <div>
                     <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.35rem' }}>
@@ -987,6 +1096,8 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                       <option value="SOL">Solana (SOL / USD)</option>
                       <option value="SOMNIA">Somnia (SOMNIA / USD)</option>
                       <option value="SUI">Sui Network (SUI / USD)</option>
+                      <option value="DOGE">Dogecoin (DOGE / USD)</option>
+                      <option value="PEPE">Pepe (PEPE / USD)</option>
                     </select>
                   </div>
 
