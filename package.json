@@ -1,0 +1,42 @@
+{
+  "name": "flip",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test:discover": "tsx scripts/discover.ts",
+    "test:lifecycle": "tsx scripts/lifecycle.ts",
+    "test:redeem": "tsx scripts/redeem.ts"
+  },
+  "dependencies": {
+    "@privy-io/react-auth": "^3.40.0",
+    "@privy-io/wagmi": "^1.0.6",
+    "@rainbow-me/rainbowkit": "^2.2.11",
+    "@somnia-chain/markets-sdk": "^0.28.1",
+    "@tanstack/react-query": "^5.67.2",
+    "canvas-confetti": "^1.9.4",
+    "clsx": "^2.1.1",
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.5",
+    "lucide-react": "^1.16.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "viem": "^2.23.0",
+    "wagmi": "^2.14.12",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@types/canvas-confetti": "^1.9.0",
+    "@types/node": "^22.13.9",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tsx": "^4.19.3",
+    "typescript": "~5.7.3",
+    "vite": "^6.2.0"
+  }
+}
+
