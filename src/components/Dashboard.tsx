@@ -756,7 +756,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
                         <Activity size={15} color={isSelected ? 'var(--color-black)' : '#9CA3AF'} />
-                        <span>{m.underlyingAsset} / USD Strike</span>
+                        <span>
+                          {m.underlyingAsset} / USD {m.marketId.includes('1h') ? '1H' : '15M'}
+                        </span>
                       </div>
                       <span className="font-terminal" style={{ fontSize: '0.76rem', color: isSelected ? 'var(--color-black)' : '#9CA3AF', fontWeight: 700 }}>
                         {formatPercent(m.bestUpProbability)}

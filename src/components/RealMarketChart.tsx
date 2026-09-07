@@ -88,16 +88,19 @@ export const RealMarketChart: React.FC<RealMarketChartProps> = ({ market }) => {
     const initialList = generateTimeframeCandles(market.currentPrice);
     setCandles(initialList);
 
-    // Query high-speed Gate.io Spot Candlesticks API for real historical candles (0 geo-blocks)
+    // Query real historical candlesticks from Binance Vision (primary) with Gate.io failover
     const fetchRemoteKlines = async () => {
       const asset = market.underlyingAsset === 'SOMNIA' ? 'SOL' : market.underlyingAsset;
-      const pair = `${asset}_USDT`;
+      const symbol = `${asset}USDT`;
+      let loaded = false;
+
+      // 1. Primary: Binance Vision Klines API (zero CORS, zero rate limits, accurate real-time candles)
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const timeoutId = setTimeout(() => controller.abort(), 4500);
 
         const res = await fetch(
-          `https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=${pair}&interval=${interval}&limit=${tfConfig.count}`,
+          `https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${tfConfig.count}`,
           { signal: controller.signal }
         ).catch(() => null);
         clearTimeout(timeoutId);
@@ -105,28 +108,66 @@ export const RealMarketChart: React.FC<RealMarketChartProps> = ({ market }) => {
         if (res && res.ok) {
           const raw = await res.json();
           if (Array.isArray(raw) && raw.length > 3) {
-            // Gate.io returns oldest to newest: [time_sec, quote_volume, close, high, low, open, ...]
             const parsed: CandleData[] = raw.map((k: any) => ({
-              time: Number(k[0]) * 1000,
-              volume: parseFloat(k[1]) || 0,
-              close: parseFloat(k[2]),
-              high: parseFloat(k[3]),
-              low: parseFloat(k[4]),
-              open: parseFloat(k[5]),
+              time: Number(k[0]),
+              open: parseFloat(k[1]),
+              high: parseFloat(k[2]),
+              low: parseFloat(k[3]),
+              close: parseFloat(k[4]),
+              volume: parseFloat(k[5]) || 0,
             }));
-            // Update last candle to match exact live market price
-            parsed[parsed.length - 1].close = market.currentPrice;
-            if (market.currentPrice > parsed[parsed.length - 1].high) {
-              parsed[parsed.length - 1].high = market.currentPrice;
-            }
-            if (market.currentPrice < parsed[parsed.length - 1].low) {
-              parsed[parsed.length - 1].low = market.currentPrice;
+            // Update last candle close to match exact spot price
+            if (market.currentPrice > 0) {
+              parsed[parsed.length - 1].close = market.currentPrice;
+              if (market.currentPrice > parsed[parsed.length - 1].high) {
+                parsed[parsed.length - 1].high = market.currentPrice;
+              }
+              if (market.currentPrice < parsed[parsed.length - 1].low) {
+                parsed[parsed.length - 1].low = market.currentPrice;
+              }
             }
             setCandles(parsed);
+            loaded = true;
           }
         }
-      } catch {
-        // Fallback uses the generated timeframe dataset
+      } catch {}
+
+      // 2. Failover: Gate.io Spot Candlesticks API
+      if (!loaded) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4500);
+
+          const res = await fetch(
+            `https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=${asset}_USDT&interval=${interval}&limit=${tfConfig.count}`,
+            { signal: controller.signal }
+          ).catch(() => null);
+          clearTimeout(timeoutId);
+
+          if (res && res.ok) {
+            const raw = await res.json();
+            if (Array.isArray(raw) && raw.length > 3) {
+              const parsed: CandleData[] = raw.map((k: any) => ({
+                time: Number(k[0]) * 1000,
+                volume: parseFloat(k[1]) || 0,
+                close: parseFloat(k[2]),
+                high: parseFloat(k[3]),
+                low: parseFloat(k[4]),
+                open: parseFloat(k[5]),
+              }));
+              if (market.currentPrice > 0) {
+                parsed[parsed.length - 1].close = market.currentPrice;
+                if (market.currentPrice > parsed[parsed.length - 1].high) {
+                  parsed[parsed.length - 1].high = market.currentPrice;
+                }
+                if (market.currentPrice < parsed[parsed.length - 1].low) {
+                  parsed[parsed.length - 1].low = market.currentPrice;
+                }
+              }
+              setCandles(parsed);
+            }
+          }
+        } catch {}
       }
     };
 
