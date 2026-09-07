@@ -143,8 +143,11 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
     });
 
     try {
+      // Strictly fetch fresh, un-cached live market prices directly from oracle at this exact creation second
+      const freshPrices = await livePriceStreamer.fetchRestPrices().catch(() => livePriceStreamer.getPrices());
+      const liveSpot = freshPrices[squadAsset]?.price || livePriceStreamer.getPrices()[squadAsset]?.price || getLivePrice(squadAsset);
+
       const squadRoomTitle = squadTitle || `${squadAsset} Squad Strike (${squadDurationMins}m)`;
-      const liveSpot = getLivePrice(squadAsset);
 
       // Prompt real wallet transaction or signature on Somnia Shannon
       const { txHash } = await WalletSigner.requestSquadSigning({
@@ -232,6 +235,11 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
     });
 
     try {
+      // Strictly fetch fresh, un-cached live market prices directly from oracle at this exact creation second
+      const freshPrices = await livePriceStreamer.fetchRestPrices().catch(() => livePriceStreamer.getPrices());
+      const liveSpot = freshPrices[publicAsset]?.price || livePriceStreamer.getPrices()[publicAsset]?.price || getLivePrice(publicAsset);
+      const liveChange24h = freshPrices[publicAsset]?.change24h ?? 0;
+
       const now = Date.now();
       const expiryMs = now + publicDurationHours * 60 * 60 * 1000;
       const calc = calculateStrikeAndProbability(publicStrike, publicAsset);
@@ -246,7 +254,6 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
         seedCollateralUSD: publicSeedCollateral,
       });
 
-      const liveSpot = getLivePrice(publicAsset);
       const newMarket: BinaryMarket = {
         marketId: `custom-${publicAsset.toLowerCase()}-${Date.now().toString(36)}`,
         poolAddress: txHash.startsWith('0x') && txHash.length === 42 ? txHash : `0x${Array.from({ length: 40 }, () =>
@@ -261,9 +268,9 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
         symbol: `${publicAsset}USDT`,
         strikePrice: Number(publicStrike),
         currentPrice: liveSpot,
-        change24h: prices[publicAsset]?.change24h || livePriceStreamer.getPrices()[publicAsset]?.change24h || 1.2,
-        high24h: liveSpot * 1.02,
-        low24h: liveSpot * 0.98,
+        change24h: liveChange24h,
+        high24h: freshPrices[publicAsset]?.high24h || liveSpot * 1.02,
+        low24h: freshPrices[publicAsset]?.low24h || liveSpot * 0.98,
         lastClosePrice: liveSpot,
         previousRoundWinningOutcome: 'UP',
         roundNumber: 1,
