@@ -196,23 +196,25 @@ export async function fetchLiveCryptoPrices(): Promise<Record<string, LivePriceD
 }
 
 export function calculateStrikeAndProbability(currentPrice: number, asset: string) {
-  // Volatility basis points tailored per asset to provide realistic prediction targets
-  let bps = 12; // 0.12%
-  if (asset === 'BTC') bps = 10;
-  else if (asset === 'ETH') bps = 15;
-  else if (asset === 'SOL') bps = 25;
-
-  // Clean integer strikes: decimals are NOT included or counted in prediction questions/strikes
   const baseIntegerPrice = Math.round(currentPrice);
-  let strikePrice = Math.round(currentPrice * (1 + bps / 10000));
-  if (strikePrice === baseIntegerPrice) {
-    strikePrice = baseIntegerPrice + 1;
+  let spread = 1;
+
+  if (asset === 'BTC') {
+    // 15m BTC realistic candle move ($25 - $35)
+    spread = 28;
+  } else if (asset === 'ETH') {
+    // 15m ETH realistic candle move ($2 - $4)
+    spread = 3;
+  } else if (asset === 'SOL') {
+    spread = 1;
   }
 
+  const strikePrice = baseIntegerPrice + spread;
   const delta = currentPrice - strikePrice;
   const deltaPercent = delta / (currentPrice || 1);
 
-  const upProbability = Math.min(Math.max(0.50 + deltaPercent * 15, 0.15), 0.85);
+  // Balanced 44% - 56% initial probability distribution
+  const upProbability = Math.min(Math.max(0.50 + deltaPercent * 10, 0.44), 0.56);
   const downProbability = 1 - upProbability;
 
   return {

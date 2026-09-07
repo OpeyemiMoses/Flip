@@ -63,8 +63,12 @@ let livePollInterval: any = null;
 const STORAGE_USER_MARKETS_KEY = 'flip_user_created_markets';
 
 /**
- * Computes an authentic, volatility-tailored next prediction strike
- * anchored strictly to the closing resolution price without generic whole-number rounding.
+ * Computes a realistic, volatility-calibrated next prediction strike.
+ * Anchored strictly to the closing resolution price within achievable short-interval expected move bands:
+ * - BTC (15m): $20 - $55 achievable move (0.025% - 0.07% of spot)
+ * - ETH (15m): $2 - $5 achievable move
+ * - SOL (15m): $1 - $2 achievable move
+ * - Strict clean integer values without decimals for prediction questions & strikes.
  */
 function computeDynamicRolloverStrike(
   resolvedPrice: number,
@@ -73,39 +77,34 @@ function computeDynamicRolloverStrike(
   roundNum: number,
   isOneHour: boolean
 ): number {
-  const tfMultiplier = isOneHour ? 1.75 : 1.0;
+  const tfMultiplier = isOneHour ? 1.5 : 1.0;
+  const baseInteger = Math.round(resolvedPrice);
 
-  // Seeded pattern to dynamically alternate between breakout hurdles, key pivots, and support/resistance zones
-  const patternSeed = (roundNum * 13 + Math.floor(resolvedPrice * 100)) % 5;
+  // Dynamic realistic point spread based on asset expected move in 15m/1h
+  let pointSpread: number;
 
-  let bps: number;
-  switch (patternSeed) {
-    case 0: // Tight momentum hurdle
-      bps = 6 + (roundNum % 4) * 3; // 6 - 15 bps (0.06% - 0.15%)
-      break;
-    case 1: // Resistance / Support breakout level
-      bps = 14 + (roundNum % 5) * 4; // 14 - 30 bps (0.14% - 0.30%)
-      break;
-    case 2: // Counter-trend mean reversion level
-      bps = -(8 + (roundNum % 3) * 4); // -8 - -16 bps (-0.08% - -0.16%)
-      break;
-    case 3: // Volatility expansion level
-      bps = 22 + (roundNum % 4) * 5; // 22 - 37 bps (0.22% - 0.37%)
-      break;
-    default: // Standard market drift
-      bps = 10 + (roundNum % 6) * 3; // 10 - 25 bps (0.10% - 0.25%)
-      break;
+  if (asset === 'BTC') {
+    // 15m BTC realistic candle move: $20 - $55
+    const variance = (roundNum * 7 + (baseInteger % 19)) % 36; // 0 to 35
+    pointSpread = Math.round((20 + variance) * tfMultiplier);
+  } else if (asset === 'ETH') {
+    // 15m ETH realistic candle move: $2 - $5
+    const variance = (roundNum * 3 + (baseInteger % 5)) % 4; // 0 to 3
+    pointSpread = Math.round((2 + variance) * tfMultiplier);
+  } else if (asset === 'SOL') {
+    // 15m SOL realistic candle move: $1 - $2
+    pointSpread = Math.max(1, Math.round(1 * tfMultiplier));
+  } else {
+    pointSpread = 1;
   }
 
+  // Directional momentum: if previous round resolved UP, set strike slightly above close; if DOWN, slightly below
   const sign = winningSide === 'UP' ? 1 : -1;
-  const effectiveBps = (bps * sign * tfMultiplier) / 10000;
-  
-  // Clean integer strikes: decimals are NOT included or counted in prediction questions/strikes
-  const baseIntegerPrice = Math.round(resolvedPrice);
-  let target = Math.round(resolvedPrice * (1 + effectiveBps));
+  let target = baseInteger + pointSpread * sign;
 
-  if (target === baseIntegerPrice) {
-    target = winningSide === 'UP' ? baseIntegerPrice + 1 : Math.max(baseIntegerPrice - 1, 1);
+  // Safety: ensure strike is never identical to current integer price
+  if (target === baseInteger) {
+    target = winningSide === 'UP' ? baseInteger + 1 : Math.max(baseInteger - 1, 1);
   }
 
   return target;
