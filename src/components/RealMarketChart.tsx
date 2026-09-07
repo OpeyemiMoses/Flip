@@ -88,14 +88,21 @@ export const RealMarketChart: React.FC<RealMarketChartProps> = ({ market }) => {
     const initialList = generateTimeframeCandles(market.currentPrice);
     setCandles(initialList);
 
-    // Attempt to query live Binance/Coinbase Kline API for real historical data
+    // Query high-speed Binance Data Vision Kline API for real historical candles
     const fetchRemoteKlines = async () => {
-      const symbol = `${market.underlyingAsset}USDT`;
+      const sym = market.underlyingAsset === 'SOMNIA' ? 'SOLUSDT' : `${market.underlyingAsset}USDT`;
       try {
-        const res = await fetch(
-          `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${tfConfig.count}`
-        );
-        if (res.ok) {
+        let res = await fetch(
+          `https://data-api.binance.vision/api/v3/klines?symbol=${sym}&interval=${interval}&limit=${tfConfig.count}`
+        ).catch(() => null);
+
+        if (!res || !res.ok) {
+          res = await fetch(
+            `https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${interval}&limit=${tfConfig.count}`
+          ).catch(() => null);
+        }
+
+        if (res && res.ok) {
           const raw = await res.json();
           if (Array.isArray(raw) && raw.length > 5) {
             const parsed: CandleData[] = raw.map((k: any) => ({
@@ -125,16 +132,19 @@ export const RealMarketChart: React.FC<RealMarketChartProps> = ({ market }) => {
     fetchRemoteKlines();
   }, [interval, market.underlyingAsset]);
 
-  // Synchronize the latest live candle when market.currentPrice updates
+  // Synchronize the latest live candle when market.currentPrice updates with equality guard
   useEffect(() => {
     setCandles((prev) => {
       if (prev.length === 0) return prev;
+      const last = prev[prev.length - 1];
+      if (last.close === market.currentPrice) return prev;
+
       const copy = [...prev];
-      const last = { ...copy[copy.length - 1] };
-      last.close = market.currentPrice;
-      if (market.currentPrice > last.high) last.high = market.currentPrice;
-      if (market.currentPrice < last.low) last.low = market.currentPrice;
-      copy[copy.length - 1] = last;
+      const updatedLast = { ...last };
+      updatedLast.close = market.currentPrice;
+      if (market.currentPrice > updatedLast.high) updatedLast.high = market.currentPrice;
+      if (market.currentPrice < updatedLast.low) updatedLast.low = market.currentPrice;
+      copy[copy.length - 1] = updatedLast;
       return copy;
     });
   }, [market.currentPrice]);

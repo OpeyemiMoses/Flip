@@ -381,17 +381,28 @@ export const useMarketStore = create<MarketState>((set, get) => ({
       isLiveStreaming: true,
     });
 
-    // Subscribe to live WebSocket / REST price ticks
+    // Subscribe to live spot price ticks with change-detection guard
     livePriceStreamer.subscribe((livePrices) => {
       get().checkAndRolloverMarkets(livePrices);
       set((state) => {
+        let hasAnyChange = false;
         const updated = state.markets.map((m) => {
           const live = livePrices[m.underlyingAsset];
           if (!live) return m;
 
+          if (
+            m.currentPrice === live.price &&
+            m.change24h === live.change24h &&
+            m.high24h === live.high24h &&
+            m.low24h === live.low24h
+          ) {
+            return m;
+          }
+
+          hasAnyChange = true;
           const delta = live.price - m.strikePrice;
           const deltaPct = delta / (live.price || 1);
-          const newUpProb = Math.min(Math.max(0.50 + deltaPct * 15, 0.12), 0.88);
+          const newUpProb = Math.min(Math.max(0.50 + deltaPct * 10, 0.12), 0.88);
           const newDownProb = Number((1 - newUpProb).toFixed(2));
 
           return {
@@ -405,6 +416,8 @@ export const useMarketStore = create<MarketState>((set, get) => ({
             lastUpdated: Date.now(),
           };
         });
+
+        if (!hasAnyChange) return state;
         return { markets: updated };
       });
     });
@@ -434,11 +447,10 @@ export const useMarketStore = create<MarketState>((set, get) => ({
 
     if (!livePollInterval) {
       livePollInterval = setInterval(() => {
-        get().pollLiveMarketPrices();
         if (get().userAddress) {
           get().refreshBalances();
         }
-      }, 1500);
+      }, 4000);
     }
   },
 
