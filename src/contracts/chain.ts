@@ -39,6 +39,8 @@ export const SOMNIA_CONFIG = {
   fallbackRpcUrl: 'https://api.infra.testnet.somnia.network',
   explorerUrl: 'https://shannon-explorer.somnia.network',
   faucetTelegram: 'https://t.me/+XHq0F0JXMyhmMzM0',
+  liveAppUrl: 'https://flip-prediction.vercel.app',
+  mirrorAppUrl: 'https://flip-production-63c7.up.railway.app',
   collateralAddress: '0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E' as `0x${string}`, // tUSDC
   collateralSymbol: 'tUSDC',
   collateralDecimals: 6,

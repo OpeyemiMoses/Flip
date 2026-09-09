@@ -346,6 +346,8 @@ export const dreamdex = new SomniaMarkets({
 });`} />
             <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
               {[
+                { label: "FLIP Live Web App (Vercel)", url: "https://flip-prediction.vercel.app/" },
+                { label: "FLIP High-Availability Mirror (Railway)", url: "https://flip-production-63c7.up.railway.app/" },
                 { label: "DreamDEX Documentation", url: "https://docs.dreamdex.io/developers/event-contracts" },
                 { label: "DreamDEX Bot Kit (GitHub)", url: "https://github.com/somnia-chain/dreamdex-bot-kit" },
                 { label: "Hackathon Starter Template", url: "https://github.com/IronicDeGawd/ec-dreamdex-hackathon-template" },

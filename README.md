@@ -15,22 +15,33 @@
 
   **Consumer-Grade Binary Trading Interface • Sealed-Odds Squad PvP Showdowns • Sub-150ms Exchange Feeds**
 
-  [Launch Terminal](https://github.com/OpeyemiMoses/Flip) • [Contract Directory](#somnia-shannon-testnet-verified-contracts) • [Documentation](#system-architecture) • [On-Chain Tests](#on-chain-test-suites)
+  [Launch App (Vercel)](https://flip-prediction.vercel.app/) • [Mirror (Railway)](https://flip-production-63c7.up.railway.app/) • [Contract Directory](#somnia-shannon-testnet-verified-contracts) • [Documentation](#system-architecture) • [On-Chain Tests](#on-chain-test-suites)
 
 </div>
 
 ---
 
+## Live Deployments & Access
+
+| Environment | Provider | URL | Status |
+| :--- | :--- | :--- | :--- |
+| **Production Web App** | **Vercel** | [https://flip-prediction.vercel.app](https://flip-prediction.vercel.app/) | ![Vercel](https://img.shields.io/badge/Vercel-Live-00C853?style=flat&logo=vercel) |
+| **High-Availability Mirror** | **Railway** | [https://flip-production-63c7.up.railway.app](https://flip-production-63c7.up.railway.app/) | ![Railway](https://img.shields.io/badge/Railway-Live-00C853?style=flat&logo=railway) |
+| **Source Code** | **GitHub** | [https://github.com/OpeyemiMoses/Flip](https://github.com/OpeyemiMoses/Flip) | ![GitHub](https://img.shields.io/badge/GitHub-Main-181717?style=flat&logo=github) |
+
+---
+
 ## Table of Contents
-1. [Overview & Product Vision](#overview--product-vision)
-2. [Key Innovations & Features](#key-innovations--features)
-3. [Mathematical Model & Parimutuel Settlement](#mathematical-model--parimutuel-settlement)
-4. [System Architecture](#system-architecture)
-5. [Somnia Shannon Testnet Verified Contracts](#somnia-shannon-testnet-verified-contracts)
-6. [Real-Time Zero-Latency Multi-Exchange Oracle](#real-time-zero-latency-multi-exchange-oracle)
-7. [Quickstart & Local Setup](#quickstart--local-setup)
-8. [On-Chain Test Suites](#on-chain-test-suites)
-9. [Community & Repository Standards](#community--repository-standards)
+1. [Live Deployments & Access](#live-deployments--access)
+2. [Overview & Product Vision](#overview--product-vision)
+3. [Key Innovations & Features](#key-innovations--features)
+4. [Mathematical Model & Parimutuel Settlement](#mathematical-model--parimutuel-settlement)
+5. [System Architecture](#system-architecture)
+6. [Somnia Shannon Testnet Verified Contracts](#somnia-shannon-testnet-verified-contracts)
+7. [Real-Time Zero-Latency Multi-Exchange Oracle](#real-time-zero-latency-multi-exchange-oracle)
+8. [Quickstart & Local Setup](#quickstart--local-setup)
+9. [On-Chain Test Suites](#on-chain-test-suites)
+10. [Community & Repository Standards](#community--repository-standards)
 
 ---
 
