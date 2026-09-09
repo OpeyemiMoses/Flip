@@ -566,6 +566,13 @@ export class TradingEngine {
 
     const isWonClaim = pos.status === 'WON';
 
+    // If position was already WON, payout is the full winning payout; otherwise use current cashout valuation
+    const payoutUSD = isWonClaim
+      ? pos.potentialPayoutUSD
+      : pos.cashoutPayoutUSD !== undefined
+      ? pos.cashoutPayoutUSD
+      : pos.currentValueUSD;
+
     const effectiveAddress =
       userAddress ||
       pos.userAddress ||
@@ -576,6 +583,7 @@ export class TradingEngine {
       const signRes = await WalletSigner.requestCashOutSigning({
         userAddress: effectiveAddress,
         position: pos,
+        payoutUSD,
       });
       if (signRes?.txHash && signRes.txHash.startsWith('0x') && signRes.txHash.length === 66) {
         pos.txHash = signRes.txHash;
@@ -584,14 +592,6 @@ export class TradingEngine {
 
     pos.status = isWonClaim ? 'CLAIMED' : 'CASHED_OUT';
     pos.resolvedAt = Date.now();
-
-    // If position was already WON, payout is the full winning payout; otherwise use current cashout valuation
-    const payoutUSD = isWonClaim
-      ? pos.potentialPayoutUSD
-      : pos.cashoutPayoutUSD !== undefined
-      ? pos.cashoutPayoutUSD
-      : pos.currentValueUSD;
-
     pos.currentValueUSD = payoutUSD;
     pos.cashoutPayoutUSD = payoutUSD;
 

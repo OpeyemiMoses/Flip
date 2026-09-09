@@ -302,10 +302,14 @@ export const useMarketStore = create<MarketState>((set, get) => ({
 
     try {
       const balances = await fetchOnchainBalances(address as `0x${string}`);
-      TradingEngine.setPortfolioBalance(balances.usdcBalance, address);
+      const currentStored = TradingEngine.getPortfolioBalance(address);
+      // Synchronize with on-chain balance: keep the higher of the real on-chain balance or the local credited balance
+      // so pending RPC indexing or recent settlement claims are never prematurely wiped out
+      const resolvedBalance = Math.max(balances.usdcBalance, currentStored);
+      TradingEngine.setPortfolioBalance(resolvedBalance, address);
       set({
         userGasSTT: balances.sttGas,
-        userBalanceUSD: balances.usdcBalance,
+        userBalanceUSD: resolvedBalance,
       });
     } catch (err) {
       console.warn('[FLIP] Error refreshing balances:', err);

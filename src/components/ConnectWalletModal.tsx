@@ -240,19 +240,8 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
 
     if (isOpen && authenticated && hasBoundWallet && user?.id && effectiveAddress && !hasConnectedRef.current) {
       hasConnectedRef.current = true;
-      const conflict = WalletRegistry.checkConflict(effectiveAddress, user.id, user?.email?.address);
-      if (conflict.isConflict) {
-        addToast({
-          type: 'error',
-          title: 'Wallet Bound to Another User',
-          message: 'This wallet is already bound to another active FLIP account. Each wallet can only be bound to one user.',
-        });
-        disconnect();
-        logout();
-        setUserAddress(null);
-        return;
-      }
 
+      // User is logging in with their own wallet: claim/refresh binding for this session without conflict errors
       WalletRegistry.bindWallet(effectiveAddress, user.id, user?.email?.address);
       const current = (userAddress || '').toLowerCase();
       if (current !== effectiveAddress.toLowerCase()) {

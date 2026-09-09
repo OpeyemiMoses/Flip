@@ -42,6 +42,7 @@ export function usePositions() {
         const freshBal = TradingEngine.getPortfolioBalance(userAddress || undefined);
         setUserBalance(freshBal);
         refreshPositions();
+        useMarketStore.getState().refreshBalances();
 
         const isWonClaim = updated.status === 'CLAIMED';
         const pnl = updated.unrealizedPnLUSD;

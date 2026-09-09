@@ -207,6 +207,25 @@ export const WalletRegistry = {
     const record = registry[key];
 
     if (record && record.active && record.userId !== currentUserId) {
+      // If either record.userId or currentUserId is the wallet-derived ID (e.g. user_0x...),
+      // then they are the same wallet owner connecting or logging in.
+      const walletDerivedId = `user_${key}`;
+      if (
+        record.userId.toLowerCase() === walletDerivedId ||
+        currentUserId.toLowerCase() === walletDerivedId
+      ) {
+        return { isConflict: false };
+      }
+
+      // If the email matches (case-insensitive), it is the same user
+      if (
+        currentUserEmail &&
+        record.userEmail &&
+        currentUserEmail.trim().toLowerCase() === record.userEmail.trim().toLowerCase()
+      ) {
+        return { isConflict: false };
+      }
+
       return {
         isConflict: true,
         boundToEmail: record.userEmail,

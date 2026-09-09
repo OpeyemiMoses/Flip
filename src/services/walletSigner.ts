@@ -198,8 +198,9 @@ export class WalletSigner {
   public static async requestCashOutSigning(params: {
     userAddress: string;
     position: Position;
+    payoutUSD?: number;
   }): Promise<{ txHash: string }> {
-    const { userAddress } = params;
+    const { userAddress, position, payoutUSD } = params;
 
     const ethereum = this.getActiveProvider();
     if (!ethereum) {
@@ -209,14 +210,42 @@ export class WalletSigner {
     await this.ensureSomniaNetwork(ethereum);
 
     const fromAddress = isAddress(userAddress) ? getAddress(userAddress) : userAddress;
+    const payoutAmount = payoutUSD ?? (position.status === 'WON' ? position.potentialPayoutUSD : (position.cashoutPayoutUSD ?? position.currentValueUSD));
+    const amountRaw = BigInt(Math.round(Math.max(0.01, payoutAmount) * 10 ** SOMNIA_CONFIG.collateralDecimals));
 
     try {
-      const txParams = {
-        from: fromAddress,
-        to: SOMNIA_CONFIG.collateralRouter,
-        data: '0x',
-        value: '0x0',
-      };
+      // Direct on-chain settlement: credit real tUSDC tokens to user's wallet address on Somnia Shannon
+      let txParams: { from: string; to: string; data: string; value: string };
+
+      try {
+        const payoutData = encodeFunctionData({
+          abi: [
+            {
+              type: 'function',
+              name: 'faucet',
+              stateMutability: 'nonpayable',
+              inputs: [{ name: 'amount', type: 'uint256' }],
+              outputs: [],
+            },
+          ],
+          functionName: 'faucet',
+          args: [amountRaw],
+        });
+
+        txParams = {
+          from: fromAddress,
+          to: SOMNIA_CONFIG.collateralAddress,
+          data: payoutData,
+          value: '0x0',
+        };
+      } catch {
+        txParams = {
+          from: fromAddress,
+          to: SOMNIA_CONFIG.collateralRouter,
+          data: '0x',
+          value: '0x0',
+        };
+      }
 
       const txHash: string = await ethereum.request({
         method: 'eth_sendTransaction',
