@@ -45,7 +45,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onLaunchApp })
 
   const { wallets } = useWallets();
   const { disconnect } = useDisconnect();
-  const { userBalanceUSD, userGasSTT, positions, stats, refreshBalances, addToast } = useMarketStore();
+  const { userAddress, userBalanceUSD, userGasSTT, positions, stats, refreshBalances, addToast } = useMarketStore();
 
   const handleProfileSignOut = async () => {
     try {
@@ -59,17 +59,21 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onLaunchApp })
       console.warn('Privy logout err:', e);
     }
     useMarketStore.getState().setUserAddress(null);
+    try {
+      localStorage.removeItem('flip_active_session_wallet');
+    } catch {}
     onBack();
   };
 
   const { linkWallet, linkEmail, linkGoogle, linkTwitter, linkDiscord } = useLinkAccount({
     onSuccess: ({ user: updatedUser, linkMethod }: any) => {
-      if (linkMethod === 'wallet' && user?.id) {
+      if (linkMethod === 'wallet' && (user?.id || userAddress)) {
         const newlyBound = updatedUser?.linkedAccounts?.find(
           (a: any) => a.type === 'wallet' && a.walletClientType !== 'privy'
         );
         if (newlyBound?.address) {
-          const conflict = WalletRegistry.checkConflict(newlyBound.address, user.id, user?.email?.address);
+          const uid = user?.id || `user_${newlyBound.address.toLowerCase()}`;
+          const conflict = WalletRegistry.checkConflict(newlyBound.address, uid, user?.email?.address);
           if (conflict.isConflict) {
             addToast({
               type: "error",
@@ -82,15 +86,91 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onLaunchApp })
             disconnect();
             return;
           }
-          WalletRegistry.bindWallet(newlyBound.address, user.id, user?.email?.address);
+          WalletRegistry.bindWallet(newlyBound.address, uid, user?.email?.address);
           useMarketStore.getState().setUserAddress(newlyBound.address);
+        }
+      } else if (linkMethod === 'google' || linkMethod === 'google_oauth') {
+        const googleAcc = updatedUser?.linkedAccounts?.find((a: any) => a.type === 'google_oauth');
+        const id = googleAcc?.email || googleAcc?.subject;
+        const uid = user?.id || (userAddress ? `user_${userAddress.toLowerCase()}` : '');
+        if (id && uid) {
+          const conflict = WalletRegistry.checkSocialConflict('google', id, uid);
+          if (conflict.isConflict) {
+            addToast({
+              type: 'error',
+              title: 'Google Account Bound Elsewhere',
+              message: 'This Google account is already linked to another FLIP user.',
+            });
+            if (unlinkGoogle) {
+              unlinkGoogle(googleAcc.subject || id).catch(console.warn);
+            }
+            return;
+          }
+          WalletRegistry.bindSocial('google', id, uid);
+        }
+      } else if (linkMethod === 'twitter' || linkMethod === 'twitter_oauth') {
+        const twitterAcc = updatedUser?.linkedAccounts?.find((a: any) => a.type === 'twitter_oauth');
+        const id = twitterAcc?.username || twitterAcc?.subject;
+        const uid = user?.id || (userAddress ? `user_${userAddress.toLowerCase()}` : '');
+        if (id && uid) {
+          const conflict = WalletRegistry.checkSocialConflict('twitter', id, uid);
+          if (conflict.isConflict) {
+            addToast({
+              type: 'error',
+              title: 'Twitter Account Bound Elsewhere',
+              message: 'This Twitter / X account is already linked to another FLIP user.',
+            });
+            if (unlinkTwitter) {
+              unlinkTwitter(twitterAcc.subject || id).catch(console.warn);
+            }
+            return;
+          }
+          WalletRegistry.bindSocial('twitter', id, uid);
+        }
+      } else if (linkMethod === 'discord' || linkMethod === 'discord_oauth') {
+        const discordAcc = updatedUser?.linkedAccounts?.find((a: any) => a.type === 'discord_oauth');
+        const id = discordAcc?.username || discordAcc?.email || discordAcc?.subject;
+        const uid = user?.id || (userAddress ? `user_${userAddress.toLowerCase()}` : '');
+        if (id && uid) {
+          const conflict = WalletRegistry.checkSocialConflict('discord', id, uid);
+          if (conflict.isConflict) {
+            addToast({
+              type: 'error',
+              title: 'Discord Account Bound Elsewhere',
+              message: 'This Discord account is already linked to another FLIP user.',
+            });
+            if (unlinkDiscord) {
+              unlinkDiscord(discordAcc.subject || id).catch(console.warn);
+            }
+            return;
+          }
+          WalletRegistry.bindSocial('discord', id, uid);
+        }
+      } else if (linkMethod === 'email') {
+        const emailAcc = updatedUser?.linkedAccounts?.find((a: any) => a.type === 'email');
+        const id = emailAcc?.address;
+        const uid = user?.id || (userAddress ? `user_${userAddress.toLowerCase()}` : '');
+        if (id && uid) {
+          const conflict = WalletRegistry.checkSocialConflict('email', id, uid);
+          if (conflict.isConflict) {
+            addToast({
+              type: 'error',
+              title: 'Email Bound Elsewhere',
+              message: 'This email is already linked to another FLIP user.',
+            });
+            if (unlinkEmail) {
+              unlinkEmail(id).catch(console.warn);
+            }
+            return;
+          }
+          WalletRegistry.bindSocial('email', id, uid);
         }
       }
       addToast({ type: "success", title: "Account Linked", message: `${linkMethod} bound to your FLIP profile.` });
       refreshBalances();
     },
     onError: (err: any) => {
-      addToast({ type: "error", title: "Link Failed", message: String(err) || "Could not link account." });
+      addToast({ type: "error", title: "Link Failed", message: String(err?.message || err) || "Could not link account." });
     },
   });
 
@@ -114,8 +194,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onLaunchApp })
 
   const linkedWallets = user?.linkedAccounts?.filter((a: any) => a.type === "wallet") || [];
   const boundExternalWallet = linkedWallets.find((w: any) => w.walletClientType !== "privy");
-  const activeWalletAddress = boundExternalWallet?.address || null;
+  const activeWalletAddress = boundExternalWallet?.address || userAddress || null;
   const isEmbedded = user?.wallet?.walletClientType === "privy";
+
+  const isUserSignedIn = authenticated || !!userAddress;
 
   const linkedGoogle = user?.linkedAccounts?.find((a: any) => a.type === "google_oauth");
   const linkedTwitter = user?.linkedAccounts?.find((a: any) => a.type === "twitter_oauth");
@@ -123,8 +205,8 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onLaunchApp })
   const linkedEmail = user?.linkedAccounts?.find((a: any) => a.type === "email");
 
   const linkedSocialsCount = [linkedGoogle, linkedTwitter, linkedDiscord, linkedEmail].filter(Boolean).length;
-  const canUnlinkWallet = linkedWallets.length > 1 || linkedSocialsCount > 0;
-  const canUnlinkSocial = linkedSocialsCount > 1 || linkedWallets.length > 0;
+  const canUnlinkWallet = (linkedWallets.length > 1 || (linkedWallets.length === 1 && !userAddress)) || linkedSocialsCount > 0;
+  const canUnlinkSocial = linkedSocialsCount > 1 || (linkedWallets.length > 0 || !!userAddress);
 
   // Derive display stats from persisted stats store (survives ledger clears)
   const totalPositions = (stats?.totalTrades ?? 0) || positions?.length || 0;
@@ -148,7 +230,18 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onLaunchApp })
   const displayName = (linkedTwitter as any)?.username
     || (linkedGoogle as any)?.name
     || (linkedEmail as any)?.address?.split("@")[0]
-    || (activeWalletAddress ? `${activeWalletAddress.slice(0, 6)}...${activeWalletAddress.slice(-4)}` : "Anonymous");
+    || (activeWalletAddress ? `${activeWalletAddress.slice(0, 6)}...${activeWalletAddress.slice(-4)}` : "Web3 Trader");
+
+  const handleConnectSocialOption = (provider: 'google' | 'twitter' | 'discord' | 'email') => {
+    if (authenticated) {
+      if (provider === 'google') linkGoogle();
+      else if (provider === 'twitter') linkTwitter();
+      else if (provider === 'discord') linkDiscord();
+      else if (provider === 'email') linkEmail();
+    } else {
+      login({ loginMethods: [provider] });
+    }
+  };
 
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#FFFFFF", color: "var(--color-black)" }}>
@@ -182,16 +275,16 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onLaunchApp })
 
       <div style={{ maxWidth: "820px", margin: "0 auto", padding: "2.5rem 1.5rem 6rem 1.5rem" }}>
 
-        {!authenticated ? (
+        {!isUserSignedIn ? (
           /* ── NOT LOGGED IN ── */
           <div style={{ textAlign: "center", padding: "5rem 0" }}>
             <div style={{ width: "56px", height: "56px", backgroundColor: "#F4F4F4", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1.25rem auto" }}>
               <User size={24} color="var(--color-grey-muted)" />
             </div>
             <div className="font-bobz" style={{ fontSize: "1.3rem", marginBottom: "0.5rem" }}>Not Signed In</div>
-            <p style={{ fontSize: "0.88rem", color: "var(--color-grey-text)", marginBottom: "1.5rem" }}>Sign in to view and manage your FLIP profile, connected wallets, and account stats.</p>
+            <p style={{ fontSize: "0.88rem", color: "var(--color-grey-text)", marginBottom: "1.5rem" }}>Connect your Web3 wallet or sign in to view and manage your FLIP profile, linked socials, and account stats.</p>
             <button onClick={() => login()} className="btn-launch-black" style={{ padding: "0.7rem 1.5rem", fontSize: "0.85rem" }}>
-              <span>Sign In</span><ArrowUpRight size={13} />
+              <span>Connect / Sign In</span><ArrowUpRight size={13} />
             </button>
           </div>
         ) : (
@@ -247,66 +340,92 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onLaunchApp })
             <div style={{ marginBottom: "2.5rem" }}>
               <SectionTitle title="Bound Wallet" subtitle="The Web3 wallet linked to this account for trading and payouts" />
               <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "0.75rem" }}>
-                {linkedWallets.length === 0 ? (
+                {linkedWallets.length === 0 && !activeWalletAddress ? (
                   <div style={{ padding: "1.25rem", border: "1px dashed rgba(0,0,0,0.12)", borderRadius: "8px", textAlign: "center", color: "var(--color-grey-muted)", fontSize: "0.84rem" }}>
                     No wallet bound. Bind your Web3 wallet (MetaMask / Rabby) to trade.
                   </div>
-                ) : linkedWallets.map((w: any) => (
-                  <div key={w.address} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.9rem 1rem", border: "1px solid rgba(0,0,0,0.08)", borderRadius: "8px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                      <div style={{ width: "30px", height: "30px", backgroundColor: "#F4F4F4", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <Wallet size={14} color="var(--color-black)" />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: "0.84rem", fontWeight: 700, fontFamily: "var(--font-terminal)" }}>{w.address.slice(0, 10)}...{w.address.slice(-6)}</div>
-                        <div style={{ fontSize: "0.72rem", color: "var(--color-grey-muted)" }}>
-                          {w.walletClientType === "privy" ? "Privy Embedded Wallet" : w.walletClientType || "External Wallet"}
-                          {w.address === activeWalletAddress && <span style={{ marginLeft: "0.5rem", color: "var(--color-green)", fontWeight: 700 }}>— Active Bound Wallet</span>}
+                ) : (
+                  <>
+                    {linkedWallets.map((w: any) => (
+                      <div key={w.address} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.9rem 1rem", border: "1px solid rgba(0,0,0,0.08)", borderRadius: "8px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                          <div style={{ width: "30px", height: "30px", backgroundColor: "#F4F4F4", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <Wallet size={14} color="var(--color-black)" />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: "0.84rem", fontWeight: 700, fontFamily: "var(--font-terminal)" }}>{w.address.slice(0, 10)}...{w.address.slice(-6)}</div>
+                            <div style={{ fontSize: "0.72rem", color: "var(--color-grey-muted)" }}>
+                              {w.walletClientType === "privy" ? "Privy Embedded Wallet" : w.walletClientType || "External Wallet"}
+                              {w.address.toLowerCase() === activeWalletAddress?.toLowerCase() && <span style={{ marginLeft: "0.5rem", color: "var(--color-green)", fontWeight: 700 }}>— Active Bound Wallet</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: "0.5rem" }}>
+                          <button onClick={() => handleCopy(w.address)} style={{ display: "flex", alignItems: "center", gap: "0.3rem", background: "none", border: "1px solid rgba(0,0,0,0.1)", cursor: "pointer", padding: "0.35rem 0.65rem", borderRadius: "5px", fontSize: "0.72rem", color: "var(--color-grey-text)" }}>
+                            {copiedAddr === w.address ? <Check size={11} color="var(--color-green)" /> : <Copy size={11} />}
+                          </button>
+                          {w.walletClientType === "privy" && (
+                            <button onClick={() => exportWallet()} style={{ display: "flex", alignItems: "center", gap: "0.3rem", background: "none", border: "1px solid rgba(0,0,0,0.1)", cursor: "pointer", padding: "0.35rem 0.65rem", borderRadius: "5px", fontSize: "0.72rem", color: "var(--color-grey-text)" }}>
+                              <Key size={11} /> Export
+                            </button>
+                          )}
+                          {confirmUnlink === w.address ? (
+                            <div style={{ display: "flex", gap: "0.4rem" }}>
+                              <button onClick={async () => {
+                                try {
+                                  await unlinkWallet(w.address);
+                                  if (user?.id) {
+                                    WalletRegistry.unbindWallet(w.address, user.id);
+                                  }
+                                  setConfirmUnlink(null);
+                                  addToast({ type: "success", title: "Wallet Removed", message: "Wallet removed from your profile." });
+                                } catch (e: any) {
+                                  addToast({ type: "error", title: "Cannot Remove", message: e?.message || "Failed to remove wallet." });
+                                }
+                              }}
+                                style={{ fontSize: "0.72rem", fontWeight: 700, backgroundColor: "#DC2626", color: "#FFFFFF", border: "none", borderRadius: "5px", padding: "0.35rem 0.65rem", cursor: "pointer" }}>
+                                Confirm Remove
+                              </button>
+                              <button onClick={() => setConfirmUnlink(null)} style={{ fontSize: "0.72rem", background: "none", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "5px", padding: "0.35rem 0.65rem", cursor: "pointer", color: "var(--color-grey-text)" }}>
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => canUnlinkWallet ? setConfirmUnlink(w.address) : addToast({ type: "error", title: "Cannot Unbind", message: "You must have at least one auth method remaining." })}
+                              style={{ display: "flex", alignItems: "center", gap: "0.3rem", background: "none", border: "1px solid rgba(0,0,0,0.1)", cursor: "pointer", padding: "0.35rem 0.65rem", borderRadius: "5px", fontSize: "0.72rem", color: "#DC2626" }}>
+                              <Unlink size={11} /> {w.walletClientType === "privy" ? "Remove Unused Wallet" : "Unbind Wallet"}
+                            </button>
+                          )}
                         </div>
                       </div>
-                    </div>
-                    <div style={{ display: "flex", gap: "0.5rem" }}>
-                      <button onClick={() => handleCopy(w.address)} style={{ display: "flex", alignItems: "center", gap: "0.3rem", background: "none", border: "1px solid rgba(0,0,0,0.1)", cursor: "pointer", padding: "0.35rem 0.65rem", borderRadius: "5px", fontSize: "0.72rem", color: "var(--color-grey-text)" }}>
-                        {copiedAddr === w.address ? <Check size={11} color="var(--color-green)" /> : <Copy size={11} />}
-                      </button>
-                      {w.walletClientType === "privy" && (
-                        <button onClick={() => exportWallet()} style={{ display: "flex", alignItems: "center", gap: "0.3rem", background: "none", border: "1px solid rgba(0,0,0,0.1)", cursor: "pointer", padding: "0.35rem 0.65rem", borderRadius: "5px", fontSize: "0.72rem", color: "var(--color-grey-text)" }}>
-                          <Key size={11} /> Export
-                        </button>
-                      )}
-                      {confirmUnlink === w.address ? (
-                        <div style={{ display: "flex", gap: "0.4rem" }}>
-                          <button onClick={async () => {
-                            try {
-                              await unlinkWallet(w.address);
-                              if (user?.id) {
-                                WalletRegistry.unbindWallet(w.address, user.id);
-                              }
-                              setConfirmUnlink(null);
-                              addToast({ type: "success", title: "Wallet Removed", message: "Wallet removed from your profile." });
-                            } catch (e: any) {
-                              addToast({ type: "error", title: "Cannot Remove", message: e?.message || "Failed to remove wallet." });
-                            }
-                          }}
-                            style={{ fontSize: "0.72rem", fontWeight: 700, backgroundColor: "#DC2626", color: "#FFFFFF", border: "none", borderRadius: "5px", padding: "0.35rem 0.65rem", cursor: "pointer" }}>
-                            Confirm Remove
-                          </button>
-                          <button onClick={() => setConfirmUnlink(null)} style={{ fontSize: "0.72rem", background: "none", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "5px", padding: "0.35rem 0.65rem", cursor: "pointer", color: "var(--color-grey-text)" }}>
-                            Cancel
+                    ))}
+
+                    {/* If userAddress is connected but not in linkedWallets array */}
+                    {linkedWallets.length === 0 && activeWalletAddress && (
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.9rem 1rem", border: "1px solid rgba(0,0,0,0.08)", borderRadius: "8px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                          <div style={{ width: "30px", height: "30px", backgroundColor: "#F4F4F4", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <Wallet size={14} color="var(--color-black)" />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: "0.84rem", fontWeight: 700, fontFamily: "var(--font-terminal)" }}>{activeWalletAddress.slice(0, 10)}...{activeWalletAddress.slice(-6)}</div>
+                            <div style={{ fontSize: "0.72rem", color: "var(--color-grey-muted)" }}>
+                              Connected Web3 Wallet <span style={{ marginLeft: "0.5rem", color: "var(--color-green)", fontWeight: 700 }}>— Active Bound Wallet</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: "0.5rem" }}>
+                          <button onClick={() => handleCopy(activeWalletAddress)} style={{ display: "flex", alignItems: "center", gap: "0.3rem", background: "none", border: "1px solid rgba(0,0,0,0.1)", cursor: "pointer", padding: "0.35rem 0.65rem", borderRadius: "5px", fontSize: "0.72rem", color: "var(--color-grey-text)" }}>
+                            {copiedAddr === activeWalletAddress ? <Check size={11} color="var(--color-green)" /> : <Copy size={11} />}
                           </button>
                         </div>
-                      ) : (
-                        <button
-                          onClick={() => canUnlinkWallet ? setConfirmUnlink(w.address) : addToast({ type: "error", title: "Cannot Unbind", message: "You must have at least one auth method remaining." })}
-                          style={{ display: "flex", alignItems: "center", gap: "0.3rem", background: "none", border: "1px solid rgba(0,0,0,0.1)", cursor: "pointer", padding: "0.35rem 0.65rem", borderRadius: "5px", fontSize: "0.72rem", color: "#DC2626" }}>
-                          <Unlink size={11} /> {w.walletClientType === "privy" ? "Remove Unused Wallet" : "Unbind Wallet"}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
-              {!boundExternalWallet && (
+              {!boundExternalWallet && !activeWalletAddress && (
                 <button onClick={() => linkWallet()} style={{ display: "flex", alignItems: "center", gap: "0.5rem", background: "var(--color-black)", color: "#FFFFFF", border: "none", cursor: "pointer", padding: "0.7rem 1.25rem", borderRadius: "8px", fontSize: "0.85rem", fontWeight: 700, marginTop: "0.75rem" }}>
                   <Link2 size={14} /> Bind Real Web3 Wallet (MetaMask / Rabby)
                 </button>
@@ -318,10 +437,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onLaunchApp })
               <SectionTitle title="Connected Identities" subtitle="Social accounts and email linked to your FLIP profile" />
               <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem" }}>
                 {[
-                  { key: 'twitter', label: 'Twitter', icon: MessageCircle, linked: linkedTwitter, linkFn: () => linkTwitter(), unlinkFn: () => unlinkTwitter((linkedTwitter as any)?.subject), identifier: (linkedTwitter as any)?.username ? `@${(linkedTwitter as any).username}` : null },
-                  { key: "google", label: "Google", icon: Globe, linked: linkedGoogle, linkFn: () => linkGoogle(), unlinkFn: () => unlinkGoogle((linkedGoogle as any)?.subject), identifier: (linkedGoogle as any)?.email || null },
-                  { key: "discord", label: "Discord", icon: Activity, linked: linkedDiscord, linkFn: () => linkDiscord(), unlinkFn: () => unlinkDiscord((linkedDiscord as any)?.subject), identifier: (linkedDiscord as any)?.username ? `@${(linkedDiscord as any).username}` : null },
-                  { key: "email", label: "Email", icon: Mail, linked: linkedEmail, linkFn: () => linkEmail(), unlinkFn: () => unlinkEmail((linkedEmail as any)?.address), identifier: (linkedEmail as any)?.address || null },
+                  { key: 'twitter' as const, label: 'Twitter / X', icon: MessageCircle, linked: linkedTwitter, linkFn: () => handleConnectSocialOption('twitter'), unlinkFn: () => unlinkTwitter((linkedTwitter as any)?.subject), identifier: (linkedTwitter as any)?.username ? `@${(linkedTwitter as any).username}` : null },
+                  { key: "google" as const, label: "Google", icon: Globe, linked: linkedGoogle, linkFn: () => handleConnectSocialOption('google'), unlinkFn: () => unlinkGoogle((linkedGoogle as any)?.subject), identifier: (linkedGoogle as any)?.email || null },
+                  { key: "discord" as const, label: "Discord", icon: Activity, linked: linkedDiscord, linkFn: () => handleConnectSocialOption('discord'), unlinkFn: () => unlinkDiscord((linkedDiscord as any)?.subject), identifier: (linkedDiscord as any)?.username ? `@${(linkedDiscord as any).username}` : null },
+                  { key: "email" as const, label: "Email", icon: Mail, linked: linkedEmail, linkFn: () => handleConnectSocialOption('email'), unlinkFn: () => unlinkEmail((linkedEmail as any)?.address), identifier: (linkedEmail as any)?.address || null },
                 ].map(({ key, label, icon: Icon, linked, linkFn, unlinkFn, identifier }) => (
                   <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.85rem 1rem", border: `1px solid ${linked ? "rgba(0,0,0,0.08)" : "rgba(0,0,0,0.05)"}`, borderRadius: "8px", backgroundColor: linked ? "#FFFFFF" : "#FAFAFA" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>

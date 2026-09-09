@@ -937,8 +937,8 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                         borderRadius: '26px',
                         padding: '0.92rem 1.75rem',
                         fontSize: '0.94rem',
-                        fontFamily: 'var(--font-bobz)',
-                        fontWeight: 800,
+                        fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
+                        fontWeight: 700,
                         cursor: isSigningProof ? 'not-allowed' : 'pointer',
                         width: '100%',
                         textAlign: 'center',
@@ -977,8 +977,13 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                         }}
                       >
                         <span
-                          className="font-bobz"
-                          style={{ fontSize: '0.82rem', fontWeight: 800, color: '#111827' }}
+                          style={{
+                            fontSize: '0.80rem',
+                            fontWeight: 800,
+                            color: '#111827',
+                            fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
+                            letterSpacing: '0.04em',
+                          }}
                         >
                           SELECT WALLET
                         </span>
@@ -1014,8 +1019,12 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                         }}
                       >
                         <span
-                          className="font-bobz"
-                          style={{ fontSize: '0.86rem', fontWeight: 700, color: '#111827' }}
+                          style={{
+                            fontSize: '0.86rem',
+                            fontWeight: 700,
+                            color: '#111827',
+                            fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
+                          }}
                         >
                           OKX Wallet
                         </span>
@@ -1060,8 +1069,12 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                         }}
                       >
                         <span
-                          className="font-bobz"
-                          style={{ fontSize: '0.86rem', fontWeight: 700, color: '#111827' }}
+                          style={{
+                            fontSize: '0.86rem',
+                            fontWeight: 700,
+                            color: '#111827',
+                            fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
+                          }}
                         >
                           MetaMask
                         </span>
@@ -1106,8 +1119,12 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                         }}
                       >
                         <span
-                          className="font-bobz"
-                          style={{ fontSize: '0.86rem', fontWeight: 700, color: '#111827' }}
+                          style={{
+                            fontSize: '0.86rem',
+                            fontWeight: 700,
+                            color: '#111827',
+                            fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
+                          }}
                         >
                           Rabby Wallet
                         </span>
@@ -1152,8 +1169,12 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                         }}
                       >
                         <span
-                          className="font-bobz"
-                          style={{ fontSize: '0.86rem', fontWeight: 700, color: '#111827' }}
+                          style={{
+                            fontSize: '0.86rem',
+                            fontWeight: 700,
+                            color: '#111827',
+                            fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
+                          }}
                         >
                           Coinbase Wallet
                         </span>
@@ -1198,8 +1219,12 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                         }}
                       >
                         <span
-                          className="font-bobz"
-                          style={{ fontSize: '0.86rem', fontWeight: 700, color: '#111827' }}
+                          style={{
+                            fontSize: '0.86rem',
+                            fontWeight: 700,
+                            color: '#111827',
+                            fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
+                          }}
                         >
                           WalletConnect / Mobile QR
                         </span>
@@ -1218,7 +1243,7 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                       borderRadius: '26px',
                       padding: '0.78rem 1.75rem',
                       fontSize: '0.88rem',
-                      fontFamily: 'var(--font-bobz)',
+                      fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
                       fontWeight: 700,
                       cursor: isSigningProof ? 'not-allowed' : 'pointer',
                       width: '100%',
@@ -1263,7 +1288,7 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                         borderRadius: '12px',
                         padding: '0.72rem 0.5rem',
                         fontSize: '0.80rem',
-                        fontFamily: 'var(--font-bobz)',
+                        fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
                         fontWeight: 700,
                         cursor: isSigningProof ? 'not-allowed' : 'pointer',
                         display: 'flex',
@@ -1302,7 +1327,7 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                         borderRadius: '12px',
                         padding: '0.72rem 0.5rem',
                         fontSize: '0.80rem',
-                        fontFamily: 'var(--font-bobz)',
+                        fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
                         fontWeight: 700,
                         cursor: isSigningProof ? 'not-allowed' : 'pointer',
                         display: 'flex',
@@ -1335,7 +1360,7 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                         borderRadius: '12px',
                         padding: '0.72rem 0.5rem',
                         fontSize: '0.80rem',
-                        fontFamily: 'var(--font-bobz)',
+                        fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
                         fontWeight: 700,
                         cursor: isSigningProof ? 'not-allowed' : 'pointer',
                         display: 'flex',
@@ -1371,8 +1396,8 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                       borderRadius: '26px',
                       padding: '0.95rem 1.75rem',
                       fontSize: '0.98rem',
-                      fontFamily: 'var(--font-bobz)',
-                      fontWeight: 800,
+                      fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
+                      fontWeight: 700,
                       cursor: 'pointer',
                       width: '100%',
                       textAlign: 'center',
@@ -1430,8 +1455,8 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                       borderRadius: '26px',
                       padding: '0.90rem 1.75rem',
                       fontSize: '0.94rem',
-                      fontFamily: 'var(--font-bobz)',
-                      fontWeight: 800,
+                      fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
+                      fontWeight: 700,
                       cursor: 'pointer',
                       width: '100%',
                       textAlign: 'center',
@@ -1455,7 +1480,7 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                       borderRadius: '20px',
                       padding: '0.65rem 1rem',
                       fontSize: '0.82rem',
-                      fontFamily: 'var(--font-bobz)',
+                      fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
                       fontWeight: 700,
                       cursor: 'pointer',
                       display: 'flex',
