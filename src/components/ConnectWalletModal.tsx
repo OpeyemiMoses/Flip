@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -229,9 +229,17 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
     }
   };
 
+  const hasConnectedRef = useRef(false);
+
   // If user signed in with wallet directly on the first screen, check conflict & enter dashboard
   useEffect(() => {
-    if (isOpen && authenticated && hasBoundWallet && user?.id && effectiveAddress) {
+    if (!isOpen) {
+      hasConnectedRef.current = false;
+      return;
+    }
+
+    if (isOpen && authenticated && hasBoundWallet && user?.id && effectiveAddress && !hasConnectedRef.current) {
+      hasConnectedRef.current = true;
       const conflict = WalletRegistry.checkConflict(effectiveAddress, user.id, user?.email?.address);
       if (conflict.isConflict) {
         addToast({
@@ -246,15 +254,21 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
       }
 
       WalletRegistry.bindWallet(effectiveAddress, user.id, user?.email?.address);
-      if (userAddress !== effectiveAddress) {
+      const current = (userAddress || '').toLowerCase();
+      if (current !== effectiveAddress.toLowerCase()) {
         setUserAddress(effectiveAddress);
       }
-      onClose();
+      try {
+        localStorage.setItem('flip_active_session_wallet', effectiveAddress.toLowerCase());
+      } catch {}
+
       if (onSuccessConnect) {
         onSuccessConnect();
+      } else {
+        onClose();
       }
     }
-  }, [isOpen, authenticated, hasBoundWallet, effectiveAddress, user, userAddress, onClose, onSuccessConnect, setUserAddress, disconnect, logout, addToast]);
+  }, [isOpen, authenticated, hasBoundWallet, effectiveAddress, user?.id]);
 
   // Auto-cycle the left informative carousel
   useEffect(() => {

@@ -189,12 +189,15 @@ export default function App() {
       if (current !== boundWalletAddress.toLowerCase()) {
         setUserAddress(boundWalletAddress);
       }
+      if (!authSignature) {
+        setAuthSignature(`privy-${boundWalletAddress.toLowerCase()}`);
+      }
     }
-  }, [ready, authenticated, signedInWithoutWallet, boundWalletAddress, wagmiIsConnected, userAddress, authSignature, wagmiDisconnect, setUserAddress, setAuthSignature]);
+  }, [ready, authenticated, signedInWithoutWallet, boundWalletAddress, wagmiIsConnected, userAddress, authSignature]);
 
   const isUserAuthenticatedAndConnected = !!(
     userAddress &&
-    authSignature
+    (authSignature || authenticated)
   );
 
   // When user is authenticated and session is activated, enter dashboard
