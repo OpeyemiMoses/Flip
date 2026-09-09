@@ -58,9 +58,11 @@ Traditional decentralized prediction markets suffer from slow block finality, hi
 - **Decimals Removed**: Prediction questions and strike targets are strictly denominated in clean integer prices (e.g., `$79,483`, `$79,521`, `$2,492`, `$106`).
 - **Achievable Expected Moves**: Subsequent rounds calculate realistic resistance, momentum, or support targets tailored to 15-minute / 1-hour volatility bands.
 
-### 4. Frictionless Web2/Web3 Onboarding
+### 4. Frictionless Web2/Web3 Onboarding & In-App Faucet
+- **In-App tUSDC Faucet**: Users can claim **100 tUSDC** testnet collateral directly inside the FLIP app by scrolling down to the **Portfolio Analytics** section and clicking **"GET 100 tUSDC (FAUCET)"**.
 - **Privy Email OTP**: Instant non-custodial wallet provisioning with zero seed phrase friction.
-- **Web3 Connector**: Native support for MetaMask, Coinbase Wallet, Rabby, and Rainbow with automated network switching to Somnia Shannon (`50312`).
+- **Web3 Connector**: Native support for MetaMask, OKX Wallet, Rabby, Coinbase Wallet, and Rainbow with automated network switching to Somnia Shannon (`50312`).
+- **STT Gas Faucet**: Claim native STT gas tokens via the official Somnia Telegram Faucet bot.
 
 ---
 
@@ -166,6 +168,12 @@ VITE_APP_ENV=testnet
 npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### 5. Claim Testnet Tokens (In-App Faucet)
+1. Connect your Web3 wallet or sign in via Email OTP / Social login.
+2. Scroll down to the **Portfolio Analytics** section on the main trading dashboard.
+3. Click the **"GET 100 tUSDC (FAUCET)"** button to mint 100 tUSDC testnet collateral directly to your connected address.
+4. For native gas tokens (STT), click the **Telegram Faucet** link in the header / sidebar to claim STT from the official bot.
 
 ---
 

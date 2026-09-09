@@ -30,6 +30,9 @@ export function useMarkets() {
         return;
       }
 
+      // Revalue dynamic market probabilities and active position cashouts smoothly every second
+      useMarketStore.getState().tickLiveOddsAndPositions();
+
       const totalSecs = Math.floor(diffMs / 1000);
       const days = Math.floor(totalSecs / 86400);
       const hours = Math.floor((totalSecs % 86400) / 3600);

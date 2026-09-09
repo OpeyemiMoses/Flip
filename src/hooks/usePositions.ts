@@ -18,7 +18,7 @@ export function usePositions() {
     if (!userAddress) return [];
     const normalized = userAddress.toLowerCase();
     return positions.filter(
-      (p) => !p.userAddress || p.userAddress.toLowerCase() === normalized
+      (p) => p.userAddress && p.userAddress.toLowerCase() === normalized
     );
   }, [positions, userAddress]);
 
@@ -35,12 +35,24 @@ export function usePositions() {
     try {
       const updated = await TradingEngine.cashOutPosition(positionId, userAddress || undefined);
       if (updated) {
-        setUserBalance(userBalanceUSD + updated.currentValueUSD);
+        const payout =
+          updated.cashoutPayoutUSD !== undefined
+            ? updated.cashoutPayoutUSD
+            : updated.currentValueUSD;
+        const freshBal = TradingEngine.getPortfolioBalance(userAddress || undefined);
+        setUserBalance(freshBal);
         refreshPositions();
+
+        const isWonClaim = updated.status === 'CLAIMED';
+        const pnl = updated.unrealizedPnLUSD;
+        const isProfit = pnl >= 0;
         addToast({
           type: 'success',
-          title: 'Settlement Confirmed',
-          message: `Claimed $${updated.currentValueUSD.toFixed(2)} on ${updated.marketTitle}`,
+          title: isWonClaim ? 'Winnings Claimed!' : isProfit ? 'Settled with Profit!' : 'Settlement Confirmed',
+          message: isWonClaim
+            ? `Claimed $${payout.toFixed(2)} USDso (+$${Math.max(0, pnl).toFixed(2)} profit). Rewards credited directly to your balance.`
+            : `Cashed out $${payout.toFixed(2)} USDso (${isProfit ? '+' : ''}$${pnl.toFixed(2)}). Collateral settled directly to your wallet.`,
+          txHash: updated.txHash,
         });
       }
       return updated;
@@ -57,7 +69,8 @@ export function usePositions() {
   };
 
   return {
-    positions,
+    positions: userPositions,
+    allPositions: positions,
     activePositions,
     historyPositions,
     stats,

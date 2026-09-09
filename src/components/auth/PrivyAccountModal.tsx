@@ -5,9 +5,11 @@ import {
   useWallets,
   useLinkAccount,
 } from '@privy-io/react-auth';
+import { useDisconnect } from 'wagmi';
 import { useMarketStore } from '../../store/marketStore';
 import { SOMNIA_CONFIG } from '../../contracts/chain';
 import { formatUSD } from '../../services/dreamdex';
+import { WalletRegistry } from '../../services/walletRegistry';
 import {
   Mail,
   Wallet,
@@ -50,6 +52,45 @@ export const PrivyAccountModal: React.FC<PrivyAccountModalProps> = ({
     unlinkEmail,
   } = usePrivy();
 
+  const { disconnect } = useDisconnect();
+
+  const handleDisconnectSession = async () => {
+    try {
+      disconnect();
+    } catch (e) {
+      console.warn('Wagmi disconnect err:', e);
+    }
+    try {
+      await logout();
+    } catch (e) {
+      console.warn('Privy logout err:', e);
+    }
+    useMarketStore.getState().setUserAddress(null);
+    onClose();
+  };
+
+  const handleUnlinkWallet = async (address: string) => {
+    if (!unlinkWallet) return;
+    try {
+      await unlinkWallet(address);
+      if (user?.id) {
+        WalletRegistry.unbindWallet(address, user.id);
+      }
+      addToast({
+        type: 'success',
+        title: 'Wallet Unbound',
+        message: 'Wallet unlinked from this account.',
+      });
+      refreshBalances();
+    } catch (err: any) {
+      addToast({
+        type: 'error',
+        title: 'Unbind Failed',
+        message: err?.message || 'Could not unlink wallet.',
+      });
+    }
+  };
+
   // Lock body scroll while modal is open
   useEffect(() => {
     if (isOpen) {
@@ -62,9 +103,6 @@ export const PrivyAccountModal: React.FC<PrivyAccountModalProps> = ({
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
-  if (typeof document === 'undefined') return null;
-
   const { wallets } = useWallets();
   const { userBalanceUSD, userGasSTT, refreshBalances, addToast } = useMarketStore();
 
@@ -76,6 +114,83 @@ export const PrivyAccountModal: React.FC<PrivyAccountModalProps> = ({
     linkDiscord,
   } = useLinkAccount({
     onSuccess: ({ user: updatedUser, linkMethod }: any) => {
+      if (linkMethod === 'wallet' && user?.id) {
+        const newlyBound = updatedUser?.linkedAccounts?.find(
+          (a: any) => a.type === 'wallet' && a.walletClientType !== 'privy'
+        );
+        if (newlyBound?.address) {
+          const conflict = WalletRegistry.checkConflict(newlyBound.address, user.id, user?.email?.address);
+          if (conflict.isConflict) {
+            addToast({
+              type: 'error',
+              title: 'Wallet Already Bound',
+              message: 'This wallet is already bound to another active FLIP account. Each wallet can only be bound to one user.',
+            });
+            if (unlinkWallet) {
+              unlinkWallet(newlyBound.address).catch(console.warn);
+            }
+            disconnect();
+            return;
+          }
+          WalletRegistry.bindWallet(newlyBound.address, user.id, user?.email?.address);
+          useMarketStore.getState().setUserAddress(newlyBound.address);
+        }
+      } else if (linkMethod === 'google' || linkMethod === 'google_oauth') {
+        const googleAcc = updatedUser?.linkedAccounts?.find((a: any) => a.type === 'google_oauth');
+        const id = googleAcc?.email || googleAcc?.subject;
+        if (id && user?.id) {
+          const conflict = WalletRegistry.checkSocialConflict('google', id, user.id);
+          if (conflict.isConflict) {
+            addToast({
+              type: 'error',
+              title: 'Google Account Already Bound',
+              message: 'This Google account is already bound to another active FLIP user.',
+            });
+            if ((usePrivy as any)().unlinkGoogle) {
+              (usePrivy as any)().unlinkGoogle(googleAcc.subject || id).catch(console.warn);
+            }
+            return;
+          }
+          WalletRegistry.bindSocial('google', id, user.id);
+        }
+      } else if (linkMethod === 'twitter' || linkMethod === 'twitter_oauth') {
+        const twitterAcc = updatedUser?.linkedAccounts?.find((a: any) => a.type === 'twitter_oauth');
+        const id = twitterAcc?.username || twitterAcc?.subject;
+        if (id && user?.id) {
+          const conflict = WalletRegistry.checkSocialConflict('twitter', id, user.id);
+          if (conflict.isConflict) {
+            addToast({
+              type: 'error',
+              title: 'Twitter Account Already Bound',
+              message: 'This Twitter / X account is already bound to another active FLIP user.',
+            });
+            if ((usePrivy as any)().unlinkTwitter) {
+              (usePrivy as any)().unlinkTwitter(twitterAcc.subject || id).catch(console.warn);
+            }
+            return;
+          }
+          WalletRegistry.bindSocial('twitter', id, user.id);
+        }
+      } else if (linkMethod === 'discord' || linkMethod === 'discord_oauth') {
+        const discordAcc = updatedUser?.linkedAccounts?.find((a: any) => a.type === 'discord_oauth');
+        const id = discordAcc?.username || discordAcc?.email || discordAcc?.subject;
+        if (id && user?.id) {
+          const conflict = WalletRegistry.checkSocialConflict('discord', id, user.id);
+          if (conflict.isConflict) {
+            addToast({
+              type: 'error',
+              title: 'Discord Account Already Bound',
+              message: 'This Discord account is already bound to another active FLIP user.',
+            });
+            if ((usePrivy as any)().unlinkDiscord) {
+              (usePrivy as any)().unlinkDiscord(discordAcc.subject || id).catch(console.warn);
+            }
+            return;
+          }
+          WalletRegistry.bindSocial('discord', id, user.id);
+        }
+      }
+
       addToast({
         type: 'success',
         title: 'Account Bound Successfully',
@@ -83,12 +198,11 @@ export const PrivyAccountModal: React.FC<PrivyAccountModalProps> = ({
       });
       refreshBalances();
     },
-    onError: (error: any) => {
-      console.warn('[Privy] Link error:', error);
+    onError: (err: any) => {
       addToast({
         type: 'error',
-        title: 'Binding Failed',
-        message: String(error) || 'Failed to link account.',
+        title: 'Link Failed',
+        message: String(err) || 'Failed to link account.',
       });
     },
   });
@@ -96,7 +210,7 @@ export const PrivyAccountModal: React.FC<PrivyAccountModalProps> = ({
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -120,8 +234,9 @@ export const PrivyAccountModal: React.FC<PrivyAccountModalProps> = ({
   const linkedTwitter = user?.linkedAccounts?.find((a: any) => a.type === 'twitter_oauth');
   const linkedDiscord = user?.linkedAccounts?.find((a: any) => a.type === 'discord_oauth');
 
-  // Primary active wallet
-  const activeWalletAddress = user?.wallet?.address || wallets?.[0]?.address;
+  // Primary active wallet (external only)
+  const boundExternalWallet = linkedWallets.find((w: any) => w.walletClientType !== 'privy');
+  const activeWalletAddress = boundExternalWallet?.address || null;
   const isEmbedded = user?.wallet?.walletClientType === 'privy';
 
   return createPortal(
@@ -398,11 +513,11 @@ export const PrivyAccountModal: React.FC<PrivyAccountModalProps> = ({
                             >
                               <Copy className="w-3.5 h-3.5" />
                             </button>
-                            {linkedWallets.length > 1 && unlinkWallet && (
+                            {(linkedWallets.length > 1 || user?.email || walletAcc.walletClientType === 'privy') && unlinkWallet && (
                               <button
-                                onClick={() => unlinkWallet(walletAcc.address)}
+                                onClick={() => handleUnlinkWallet(walletAcc.address)}
                                 className="p-1.5 rounded-lg hover:bg-red-500/10 text-white/40 hover:text-red-400 transition-colors"
-                                title="Unbind Wallet"
+                                title="Unbind / Remove Wallet"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -482,10 +597,7 @@ export const PrivyAccountModal: React.FC<PrivyAccountModalProps> = ({
         {authenticated && (
           <div className="p-4 border-t border-white/10 bg-white/[0.02] flex items-center justify-between">
             <button
-              onClick={() => {
-                logout();
-                onClose();
-              }}
+              onClick={handleDisconnectSession}
               className="px-4 py-2 rounded-xl text-xs font-bold text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20 flex items-center gap-2 transition-all active:scale-95"
             >
               <LogOut className="w-3.5 h-3.5" />

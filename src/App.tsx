@@ -6,7 +6,12 @@ import { useMarketStore } from './store/marketStore';
 import { formatUSD, formatPercent } from './services/dreamdex';
 import { Dashboard } from './components/Dashboard';
 import { PortfolioAnalytics } from './components/PortfolioAnalytics';
-import { useAccount } from 'wagmi';
+import { DocsPage } from './components/DocsPage';
+import { HelpPage } from './components/HelpPage';
+import { ProfilePage } from './components/ProfilePage';
+import { WalletBindingPrompt } from './components/WalletBindingPrompt';
+import { useAccount, useDisconnect } from 'wagmi';
+import { WalletRegistry } from './services/walletRegistry';
 import { CoverflowCarousel } from './components/CoverflowCarousel';
 import { ConnectWalletModal } from './components/ConnectWalletModal';
 import { PrivyAccountModal } from './components/auth/PrivyAccountModal';
@@ -43,6 +48,7 @@ import {
   Globe,
   CheckCircle2,
   ArrowRight,
+  Menu,
 } from 'lucide-react';
 
 export default function App() {
@@ -59,6 +65,8 @@ export default function App() {
     userGasSTT,
     userAddress,
     isConnected,
+    authSignature,
+    setAuthSignature,
     privateChallenges,
     userCreatedMarkets,
     setUserAddress,
@@ -69,12 +77,33 @@ export default function App() {
   const { placeQuickBet, isExecuting } = useTrade();
   const { activePositions, cashOut } = usePositions();
 
-  const [currentView, setCurrentView] = useState<'landing' | 'auth' | 'dashboard' | 'analytics'>('landing');
+  type ViewType = 'landing' | 'auth' | 'dashboard' | 'analytics' | 'docs' | 'help' | 'profile';
+
+  const getInitialView = (): ViewType => {
+    if (typeof window === 'undefined') return 'landing';
+    const params = new URLSearchParams(window.location.search);
+    const viewParam = params.get('view') as ViewType | null;
+    if (viewParam && ['landing', 'dashboard', 'analytics', 'docs', 'help', 'profile'].includes(viewParam)) {
+      return viewParam;
+    }
+    const hash = window.location.hash.replace('#', '') as ViewType;
+    if (hash && ['landing', 'dashboard', 'analytics', 'docs', 'help', 'profile'].includes(hash)) {
+      return hash;
+    }
+    const saved = localStorage.getItem('flip_active_view') as ViewType | null;
+    if (saved && ['landing', 'dashboard', 'analytics', 'docs', 'help', 'profile'].includes(saved)) {
+      return saved;
+    }
+    return 'landing';
+  };
+
+  const [currentView, setCurrentView] = useState<ViewType>(getInitialView);
   const [selectedSide, setSelectedSide] = useState<'UP' | 'DOWN'>('UP');
   const [betAmount, setBetAmount] = useState<number>(25);
   const [copiedContract, setCopiedContract] = useState<boolean>(false);
   const [isScrolled, setIsScrolled] = useState<boolean>(false);
   const [isConnectModalOpen, setIsConnectModalOpen] = useState<boolean>(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   // Deep-link: read ?challenge= from URL on startup
   const [initialChallengeId] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
@@ -84,29 +113,112 @@ export default function App() {
     return null;
   });
 
-  const [resolvedView, setResolvedView] = useState<'landing' | 'auth' | 'dashboard' | 'analytics'>('landing');
+  const [resolvedView, setResolvedView] = useState<ViewType>(getInitialView);
+  const [showWalletBindingPrompt, setShowWalletBindingPrompt] = useState(false);
+
+  // Persist current active view so page reloads do not reset back to landing
+  useEffect(() => {
+    if (currentView && currentView !== 'auth') {
+      localStorage.setItem('flip_active_view', currentView);
+    }
+  }, [currentView]);
 
   const { address: wagmiAddress, isConnected: wagmiIsConnected } = useAccount();
-  const { user, authenticated } = usePrivy();
+  const { disconnect: wagmiDisconnect } = useDisconnect();
+  const { user, authenticated, ready } = usePrivy();
   const [isPrivyModalOpen, setIsPrivyModalOpen] = useState<boolean>(false);
 
   // Authoritative Sync of Wagmi & Privy connection with Zustand Store
-  const privyAddress = user?.wallet?.address;
-  useEffect(() => {
-    if (authenticated && privyAddress) {
-      if (userAddress !== privyAddress) {
-        setUserAddress(privyAddress);
-      }
-    } else if (wagmiIsConnected && wagmiAddress) {
-      if (userAddress !== wagmiAddress) {
-        setUserAddress(wagmiAddress);
-      }
-    } else if (!authenticated && !wagmiIsConnected && userAddress !== null) {
-      setUserAddress(null);
-    }
-  }, [authenticated, privyAddress, wagmiIsConnected, wagmiAddress, userAddress, setUserAddress]);
+  // Only real external wallets are valid bound wallets (never auto Privy embedded wallets)
+  const boundWalletAddress =
+    (user?.linkedAccounts?.find((a: any) => a.type === 'wallet' && a.walletClientType !== 'privy') as any)?.address ||
+    (user?.wallet?.walletClientType !== 'privy' ? user?.wallet?.address : null);
 
-  const isUserAuthenticatedAndConnected = !!((authenticated && (privyAddress || userAddress)) || (wagmiIsConnected && (wagmiAddress || userAddress)));
+  // Keep WalletRegistry synced with current user's bound wallets
+  useEffect(() => {
+    if (authenticated && user?.id) {
+      WalletRegistry.syncUserWallets(user.id, user.email?.address, user.linkedAccounts);
+    }
+  }, [authenticated, user]);
+
+  const signedInWithoutWallet = user?.linkedAccounts?.some((a: any) =>
+    ['email', 'twitter_oauth', 'google_oauth', 'discord_oauth'].includes(a.type)
+  );
+
+  // Restore active session wallet from local storage if previously activated
+  useEffect(() => {
+    try {
+      const savedSessionWallet = localStorage.getItem('flip_active_session_wallet');
+      if (savedSessionWallet && !authSignature) {
+        setAuthSignature(`session-${savedSessionWallet}`);
+        if (!userAddress) {
+          setUserAddress(savedSessionWallet);
+        }
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    // CRITICAL: Wait until Privy has finished initializing before evaluating authentication state!
+    if (!ready) return;
+
+    // Direct wallet session is active if userAddress and signed proof are present
+    const hasDirectWalletSession = !!userAddress && !!authSignature;
+
+    if (!authenticated && !hasDirectWalletSession) {
+      // User is confirmed logged out from both Privy and direct wallet: completely clear
+      if (userAddress !== null) {
+        setUserAddress(null);
+      }
+      if (authSignature !== null) {
+        setAuthSignature(null);
+      }
+      try {
+        localStorage.removeItem('flip_active_session_wallet');
+      } catch {}
+      if (wagmiIsConnected) {
+        try {
+          wagmiDisconnect();
+        } catch (e) {
+          console.warn('Wagmi disconnect err:', e);
+        }
+      }
+    } else if (authenticated && !signedInWithoutWallet && boundWalletAddress) {
+      // Direct Web3 wallet login flow: userAddress is the connected wallet
+      if (userAddress !== boundWalletAddress) {
+        setUserAddress(boundWalletAddress);
+      }
+    }
+  }, [ready, authenticated, signedInWithoutWallet, boundWalletAddress, wagmiIsConnected, userAddress, authSignature, wagmiDisconnect, setUserAddress, setAuthSignature]);
+
+  const isUserAuthenticatedAndConnected = !!(
+    userAddress &&
+    authSignature
+  );
+
+  // When user is authenticated and session is activated, enter dashboard
+  useEffect(() => {
+    if (currentView === 'auth' && isUserAuthenticatedAndConnected) {
+      setCurrentView('dashboard');
+      setResolvedView('dashboard');
+    }
+  }, [currentView, isUserAuthenticatedAndConnected]);
+
+  // Instant prompt: if user signs in with email/social,
+  // immediately prompt them to choose a wallet to sign transactions and activate the session
+  useEffect(() => {
+    if (!ready || !authenticated || !user) {
+      setShowWalletBindingPrompt(false);
+      return;
+    }
+
+    // If logged in via email/social and session is not yet activated via wallet signature
+    if (signedInWithoutWallet && (!authSignature || !userAddress)) {
+      setShowWalletBindingPrompt(true);
+    } else {
+      setShowWalletBindingPrompt(false);
+    }
+  }, [ready, authenticated, user, signedInWithoutWallet, authSignature, userAddress]);
 
   // Deep-link auto-gate: If link has ?challenge=, check if user is signed in with active wallet
   useEffect(() => {
@@ -123,7 +235,13 @@ export default function App() {
   }, [initialChallengeId, isUserAuthenticatedAndConnected]);
 
   // Launch App / Navigate Handler: prompts Privy login if not connected
-  const handleLaunchApp = (targetView: 'dashboard' | 'analytics' = 'dashboard') => {
+  const handleLaunchApp = (targetView: ViewType = 'dashboard') => {
+    setIsMobileMenuOpen(false);
+    if (targetView === 'docs' || targetView === 'help') {
+      setCurrentView(targetView);
+      setResolvedView(targetView);
+      return;
+    }
     if (isUserAuthenticatedAndConnected) {
       setCurrentView(targetView);
       setResolvedView(targetView);
@@ -271,6 +389,10 @@ export default function App() {
             setCurrentView('analytics');
             setResolvedView('analytics');
           }}
+          onOpenProfile={() => {
+            setCurrentView('profile');
+            setResolvedView('profile');
+          }}
           initialChallengeId={effectiveView === 'dashboard' ? initialChallengeId : null}
         />
       </div>
@@ -284,6 +406,42 @@ export default function App() {
         <PortfolioAnalytics
           onBackToArena={() => setCurrentView('dashboard')}
           onBackToLanding={() => setCurrentView('landing')}
+        />
+      </div>
+    );
+  }
+
+  if (effectiveView === 'profile') {
+    return (
+      <div key="profile" className="page-rise-in" style={{ minHeight: '100vh', backgroundColor: '#FFFFFF' }}>
+        <ToastContainer />
+        <ProfilePage
+          onBack={() => setCurrentView('dashboard')}
+          onLaunchApp={() => setCurrentView('dashboard')}
+        />
+      </div>
+    );
+  }
+
+  if (effectiveView === 'docs') {
+    return (
+      <div key="docs" className="page-rise-in" style={{ minHeight: '100vh', backgroundColor: '#FFFFFF' }}>
+        <ToastContainer />
+        <DocsPage
+          onBack={() => setCurrentView('landing')}
+          onLaunchApp={() => handleLaunchApp('dashboard')}
+        />
+      </div>
+    );
+  }
+
+  if (effectiveView === 'help') {
+    return (
+      <div key="help" className="page-rise-in" style={{ minHeight: '100vh', backgroundColor: '#FFFFFF' }}>
+        <ToastContainer />
+        <HelpPage
+          onBack={() => setCurrentView('landing')}
+          onLaunchApp={() => handleLaunchApp('dashboard')}
         />
       </div>
     );
@@ -303,10 +461,11 @@ export default function App() {
               src="/assets/flip_full_logo.png"
               alt="FLIP"
               className="header-logo-img"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             />
           </div>
 
-          {/* Navigation Links */}
+          {/* Desktop Navigation Links */}
           <nav className="header-nav">
             <a href="#about">About</a>
             <a href="#architecture">Architecture</a>
@@ -315,34 +474,122 @@ export default function App() {
             <a href="#dynamics-pools">Dynamics</a>
             <a href="#tokens">Tokens</a>
             <a href="#security">Security</a>
-            <a href="#docs">Docs</a>
+            <a href="#docs" onClick={(e) => { e.preventDefault(); setCurrentView('docs'); setResolvedView('docs'); }}>Docs</a>
+            <a href="#help" onClick={(e) => { e.preventDefault(); setCurrentView('help'); setResolvedView('help'); }}>Help</a>
           </nav>
 
-          {/* Action Button: Launch App */}
-          <button
-            onClick={() => handleLaunchApp('dashboard')}
-            className="btn-launch-black"
-            style={{ flexShrink: 0 }}
-          >
-            <span>Launch App</span>
-            <ArrowUpRight size={13} />
-          </button>
+          {/* Right Action Buttons */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexShrink: 0 }}>
+            <button
+              onClick={() => handleLaunchApp('dashboard')}
+              className="btn-launch-black"
+              style={{ padding: '0.45rem 1rem', fontSize: '0.80rem' }}
+            >
+              <span>Launch App</span>
+              <ArrowUpRight size={13} />
+            </button>
+
+            {/* Mobile Menu Toggle Button */}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="mobile-only"
+              style={{
+                background: 'rgba(0,0,0,0.05)',
+                border: '1px solid rgba(0,0,0,0.08)',
+                borderRadius: '8px',
+                padding: '0.45rem 0.6rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--color-black)',
+              }}
+              aria-label="Toggle Navigation Menu"
+            >
+              {isMobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
+          </div>
         </header>
       </div>
+
+      {/* Mobile Navigation Drawer Modal */}
+      {isMobileMenuOpen && (
+        <div className="mobile-nav-drawer">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(0,0,0,0.08)', paddingBottom: '1rem' }}>
+            <img src="/assets/flip_full_logo.png" alt="FLIP" style={{ height: '36px', width: 'auto' }} />
+            <button
+              onClick={() => setIsMobileMenuOpen(false)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem', color: 'var(--color-black)' }}
+            >
+              <X size={22} />
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', overflowY: 'auto', padding: '1rem 0' }}>
+            <a href="#about" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
+              <span>01. About</span>
+              <ChevronRight size={16} color="#9CA3AF" />
+            </a>
+            <a href="#architecture" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
+              <span>02. Architecture</span>
+              <ChevronRight size={16} color="#9CA3AF" />
+            </a>
+            <a href="#markets" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
+              <span>03. Live Markets</span>
+              <ChevronRight size={16} color="#9CA3AF" />
+            </a>
+            <a href="#squads" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
+              <span>04. Squads (PvP)</span>
+              <ChevronRight size={16} color="#9CA3AF" />
+            </a>
+            <a href="#dynamics-pools" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
+              <span>05. Dynamics & AMM</span>
+              <ChevronRight size={16} color="#9CA3AF" />
+            </a>
+            <a href="#tokens" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
+              <span>06. Supported Tokens</span>
+              <ChevronRight size={16} color="#9CA3AF" />
+            </a>
+            <a href="#security" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
+              <span>07. Protocol Security</span>
+              <ChevronRight size={16} color="#9CA3AF" />
+            </a>
+            <a href="#docs" className="mobile-nav-link" onClick={(e) => { e.preventDefault(); handleLaunchApp('docs'); }}>
+              <span>08. Documentation</span>
+              <ChevronRight size={16} color="#9CA3AF" />
+            </a>
+            <a href="#help" className="mobile-nav-link" onClick={(e) => { e.preventDefault(); handleLaunchApp('help'); }}>
+              <span>09. Help Center & FAQs</span>
+              <ChevronRight size={16} color="#9CA3AF" />
+            </a>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: '1.25rem' }}>
+            <button
+              onClick={() => handleLaunchApp('dashboard')}
+              className="btn-launch-black"
+              style={{ width: '100%', justifyContent: 'center', padding: '0.75rem 1rem', fontSize: '0.92rem' }}
+            >
+              <span>Launch Trading Terminal</span>
+              <ArrowUpRight size={15} />
+            </button>
+            <div style={{ textAlign: 'center', fontSize: '0.78rem', color: '#9CA3AF', fontFamily: 'var(--font-terminal)' }}>
+              Somnia Shannon Testnet (50312)
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* 2. SECTION 0.1 — HERO SPLIT (Pure White Background)                       */}
       {/* ========================================================================= */}
       <section
         id="about"
+        className="landing-hero-grid"
         style={{
           maxWidth: '1240px',
           width: '94%',
-          margin: '8.75rem auto 4.5rem auto',
-          display: 'grid',
-          gridTemplateColumns: '1.05fr 0.95fr',
-          gap: '2.5rem',
-          alignItems: 'center',
+          margin: '7.5rem auto 4.5rem auto',
         }}
       >
         {/* Left Column: Left-Aligned Editorial Typography with Blur-Pop Rise */}
@@ -517,11 +764,8 @@ export default function App() {
           </div>
 
           <div
-            className="reveal-pop reveal-delay-1"
+            className="reveal-pop reveal-delay-1 landing-arch-grid"
             style={{
-              display: 'grid',
-              gridTemplateColumns: '1.15fr 1fr',
-              gap: '2.5rem',
               backgroundColor: 'var(--color-white)',
               border: '1px solid rgba(0, 0, 0, 0.08)',
               borderRadius: '20px',
@@ -686,10 +930,8 @@ export default function App() {
 
           return (
             <div
+              className="landing-grid-3col"
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: '1.5rem',
                 alignItems: 'center',
               }}
             >
@@ -875,10 +1117,8 @@ export default function App() {
           </div>
 
           <div
+            className="landing-grid-2col"
             style={{
-              display: 'grid',
-              gridTemplateColumns: '1.2fr 1fr',
-              gap: '2rem',
               alignItems: 'stretch',
             }}
           >
@@ -912,12 +1152,12 @@ export default function App() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.85rem', marginBottom: '1rem' }}>
                   <div style={{ backgroundColor: '#F9FAFB', padding: '0.85rem', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.06)' }}>
                     <div className="font-terminal" style={{ fontSize: '0.70rem', color: '#9CA3AF', marginBottom: '0.25rem' }}>UNDERLYING ASSETS</div>
-                    <div className="font-bobz" style={{ fontSize: '0.94rem', fontWeight: 800 }}>BTC · ETH · SOL · SOMNIA · BNB</div>
+                    <div className="font-bobz" style={{ fontSize: '0.94rem', fontWeight: 800 }}>BTC / ETH / SOL / SOMNIA / BNB</div>
                   </div>
 
                   <div style={{ backgroundColor: '#F9FAFB', padding: '0.85rem', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.06)' }}>
                     <div className="font-terminal" style={{ fontSize: '0.70rem', color: '#9CA3AF', marginBottom: '0.25rem' }}>EXPIRY INTERVALS</div>
-                    <div className="font-bobz" style={{ fontSize: '0.94rem', fontWeight: 800 }}>15 Mins · 1 Hour · 24 Hours</div>
+                    <div className="font-bobz" style={{ fontSize: '0.94rem', fontWeight: 800 }}>15 Mins / 1 Hour / 24 Hours</div>
                   </div>
                 </div>
 
@@ -1054,10 +1294,8 @@ export default function App() {
 
           {/* 3 Visual Columns Grid */}
           <div
+            className="landing-grid-3col"
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '1.75rem',
               alignItems: 'stretch',
             }}
           >
@@ -1192,8 +1430,8 @@ export default function App() {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dotted rgba(0,0,0,0.15)', paddingTop: '0.45rem' }}>
-                  <span className="font-terminal" style={{ fontSize: '0.74rem', color: '#9CA3AF' }}>SLOT 01 → 06</span>
-                  <span className="font-terminal" style={{ fontSize: '0.74rem', color: 'var(--color-green)' }}>Σ = 1.00 USDso</span>
+                  <span className="font-terminal" style={{ fontSize: '0.74rem', color: '#9CA3AF' }}>SLOT 01-06</span>
+                  <span className="font-terminal" style={{ fontSize: '0.74rem', color: 'var(--color-green)' }}>Total = 1.00 USDso</span>
                 </div>
               </div>
 
@@ -1405,10 +1643,8 @@ export default function App() {
 
           {/* Squad Challenge Cards Grid */}
           <div
+            className="landing-grid-3col"
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '1.5rem',
               alignItems: 'stretch',
               marginBottom: '2rem',
             }}
@@ -1452,7 +1688,7 @@ export default function App() {
                     </h3>
 
                     <div style={{ fontSize: '0.82rem', color: 'var(--color-grey-text)', marginBottom: '0.95rem' }}>
-                      Strike Barrier: <strong>${c.strikePrice.toLocaleString()}</strong> · Entry: <strong>${c.entryFeeUSD} tUSDC</strong>
+                      Strike Barrier: <strong>${c.strikePrice.toLocaleString()}</strong> &nbsp;|&nbsp; Entry: <strong>${c.entryFeeUSD} tUSDC</strong>
                     </div>
 
                     {/* Pot & Players Progress */}
@@ -1547,13 +1783,11 @@ export default function App() {
         }}
       >
         <div
+          className="landing-grid-2col"
           style={{
             maxWidth: '1240px',
             width: '94%',
             margin: '0 auto',
-            display: 'grid',
-            gridTemplateColumns: '0.92fr 1.08fr',
-            gap: '3.5rem',
             alignItems: 'center',
           }}
         >
@@ -1935,11 +2169,7 @@ export default function App() {
 
           {/* 4 Pillars Grid */}
           <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: '1.25rem',
-            }}
+            className="landing-grid-4col"
           >
             <div className="reveal-pop reveal-delay-1" style={{ backgroundColor: '#141414', border: '1px dashed rgba(255,255,255,0.14)', borderRadius: '10px', padding: '1.35rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.55rem' }}>
@@ -2044,7 +2274,7 @@ export default function App() {
                 fontWeight: 600,
               }}
             >
-              0.7 · DEVELOPER RESOURCES &amp; STARTER TEMPLATES
+              0.7 — DEVELOPER RESOURCES &amp; STARTER TEMPLATES
             </span>
           </div>
 
@@ -2375,17 +2605,14 @@ export default function App() {
                 fontWeight: 600,
               }}
             >
-              08 · THE PROTOCOL
+              08 — THE PROTOCOL
             </span>
           </div>
 
           {/* Top Split Section: Left Headline, Right Pull Quote & Copy */}
           <div
-            className="reveal-pop"
+            className="reveal-pop landing-grid-2col"
             style={{
-              display: 'grid',
-              gridTemplateColumns: '1.05fr 1.15fr',
-              gap: '3.5rem',
               alignItems: 'start',
               paddingBottom: '2.5rem',
               borderBottom: '1px dotted rgba(0, 0, 0, 0.22)',
@@ -2472,7 +2699,7 @@ export default function App() {
                 fontWeight: 600,
               }}
             >
-              LIVE ON SOMNIA SHANNON · VERIFIED CONTRACTS
+              LIVE ON SOMNIA SHANNON — VERIFIED CONTRACTS
             </div>
 
             <div
@@ -2485,7 +2712,7 @@ export default function App() {
                 fontWeight: 600,
               }}
             >
-              CHAIN ID 50312 · DEPLOYER 0x48f5...719
+              CHAIN ID 50312 — DEPLOYER 0x48f5...719
             </div>
           </div>
         </div>
@@ -2534,15 +2761,13 @@ export default function App() {
         </div>
 
         <div
+          className="footer-grid-container landing-grid-4col"
           style={{
             position: 'relative',
             zIndex: 2,
             maxWidth: '1240px',
             width: '94%',
             margin: '0 auto',
-            display: 'grid',
-            gridTemplateColumns: '1.5fr 1fr 1fr 1fr',
-            gap: '2.5rem',
             marginBottom: '3rem',
           }}
         >
@@ -2569,17 +2794,19 @@ export default function App() {
               <a href="#squads" style={{ color: 'var(--color-grey-text)', textDecoration: 'none' }}>Squad Challenges</a>
               <a href="#dynamics-pools" style={{ color: 'var(--color-grey-text)', textDecoration: 'none' }}>Dynamics</a>
               <a href="#tokens" style={{ color: 'var(--color-grey-text)', textDecoration: 'none' }}>Somnia Economy</a>
+              <a href="#profile" onClick={(e) => { e.preventDefault(); setCurrentView('profile'); setResolvedView('profile'); window.scrollTo(0,0); }} style={{ color: 'var(--color-grey-text)', textDecoration: 'none' }}>Profile</a>
             </div>
           </div>
 
           <div className="reveal-pop reveal-delay-3">
             <div className="font-bobz" style={{ fontSize: '0.90rem', marginBottom: '1rem', color: 'var(--color-black)', letterSpacing: '0.04em' }}>
-              DEVELOPERS
+              RESOURCES
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', fontSize: '0.92rem' }}>
-              <a href="https://docs.dreamdex.io/developers/event-contracts" target="_blank" rel="noreferrer" style={{ color: 'var(--color-grey-text)', textDecoration: 'none' }}>Docs</a>
+              <a href="#docs" onClick={(e) => { e.preventDefault(); setCurrentView('docs'); setResolvedView('docs'); window.scrollTo(0,0); }} style={{ color: 'var(--color-grey-text)', textDecoration: 'none' }}>Documentation</a>
+              <a href="#help" onClick={(e) => { e.preventDefault(); setCurrentView('help'); setResolvedView('help'); window.scrollTo(0,0); }} style={{ color: 'var(--color-grey-text)', textDecoration: 'none' }}>Help Center</a>
+              <a href="https://docs.dreamdex.io/developers/event-contracts" target="_blank" rel="noreferrer" style={{ color: 'var(--color-grey-text)', textDecoration: 'none' }}>DreamDEX Docs</a>
               <a href="https://github.com/somnia-chain/dreamdex-bot-kit" target="_blank" rel="noreferrer" style={{ color: 'var(--color-grey-text)', textDecoration: 'none' }}>Bot Kit</a>
-              <a href="https://github.com/IronicDeGawd/ec-dreamdex-hackathon-template" target="_blank" rel="noreferrer" style={{ color: 'var(--color-grey-text)', textDecoration: 'none' }}>Template</a>
               <a href="https://shannon-explorer.somnia.network" target="_blank" rel="noreferrer" style={{ color: 'var(--color-grey-text)', textDecoration: 'none' }}>Explorer</a>
               <a href={SOMNIA_CONFIG.faucetTelegram} target="_blank" rel="noreferrer" style={{ color: 'var(--color-green)', textDecoration: 'none', fontWeight: 700 }}>Telegram Faucet</a>
             </div>
@@ -2621,6 +2848,17 @@ export default function App() {
       <PrivyAccountModal
         isOpen={isPrivyModalOpen}
         onClose={() => setIsPrivyModalOpen(false)}
+      />
+
+      {/* Wallet Selection & Session Sign-In Prompt — shown after email/social login */}
+      <WalletBindingPrompt
+        isOpen={showWalletBindingPrompt}
+        onClose={() => setShowWalletBindingPrompt(false)}
+        onBound={() => {
+          setShowWalletBindingPrompt(false);
+          setCurrentView('dashboard');
+          setResolvedView('dashboard');
+        }}
       />
     </div>
   );

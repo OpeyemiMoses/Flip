@@ -31,6 +31,7 @@ import {
   QrCode,
   Globe,
   ArrowRight,
+  User,
 } from 'lucide-react';
 import { useAccount } from 'wagmi';
 import confetti from 'canvas-confetti';
@@ -42,18 +43,24 @@ import { RealMarketChart } from './RealMarketChart';
 import { CreateMarketModal } from './CreateMarketModal';
 import { ConnectWalletModal } from './ConnectWalletModal';
 import { PrivyAccountModal } from './auth/PrivyAccountModal';
+import { SignOutConfirmModal } from './auth/SignOutConfirmModal';
+import { CashOutModal } from './CashOutModal';
+import { ClearLedgerModal } from './ClearLedgerModal';
+import { Position } from '../services/tradingEngine';
 import { PrivateChallengeView } from './PrivateChallengeView';
 import { SOMNIA_CONFIG } from '../contracts/chain';
 import { usePrivy } from '@privy-io/react-auth';
+import { WalletSigner } from '../services/walletSigner';
 
 interface DashboardProps {
   onBackToLanding: () => void;
   onOpenAnalytics: () => void;
+  onOpenProfile: () => void;
   /** Optional challenge ID to deep-link into on load (from ?challenge= URL param) */
   initialChallengeId?: string | null;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAnalytics, initialChallengeId }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAnalytics, onOpenProfile, initialChallengeId }) => {
   const {
     markets,
     userCreatedMarkets,
@@ -71,8 +78,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
     loadInitialData,
     refreshBalances,
     markActivityViewed,
+    unseenActivityCount,
     lastSeenPositionCount,
     clearPositions,
+    addToast,
   } = useMarketStore();
 
 
@@ -85,24 +94,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [isPrivyModalOpen, setIsPrivyModalOpen] = useState(false);
+  const [isSignOutModalOpen, setIsSignOutModalOpen] = useState(false);
   const [activityFilter, setActivityFilter] = useState<'all' | 'standard' | 'community' | 'squad'>('all');
   const [joinRoomInput, setJoinRoomInput] = useState('');
 
   // Sync Wagmi / Privy connection with Zustand Store
+  // Real external bound wallet only
+  const boundWalletAddress =
+    (user?.linkedAccounts?.find((a: any) => a.type === 'wallet' && a.walletClientType !== 'privy') as any)?.address ||
+    (user?.wallet?.walletClientType !== 'privy' ? user?.wallet?.address : null);
+  const connectedAddress = boundWalletAddress || (wagmiIsConnected && wagmiAddress ? wagmiAddress : null);
+
   useEffect(() => {
-    if (authenticated && user?.wallet?.address) {
-      setUserAddress(user.wallet.address);
-    } else if (wagmiIsConnected && wagmiAddress) {
-      setUserAddress(wagmiAddress);
+    if (connectedAddress) {
+      setUserAddress(connectedAddress);
     } else if (!authenticated && !wagmiIsConnected && userAddress) {
       setUserAddress(null);
     }
-  }, [authenticated, user, wagmiIsConnected, wagmiAddress, setUserAddress, userAddress]);
+  }, [authenticated, wagmiIsConnected, connectedAddress, setUserAddress, userAddress]);
 
   const { placeQuickBet, isExecuting } = useTrade();
   const { positions, activePositions, historyPositions, cashOut } = usePositions();
-  // Derive badge count reactively — always accurate, survives any navigation (no local state needed)
-  const unseenActivityCount = Math.max(0, positions.length - lastSeenPositionCount);
+
+  // When active module is 'activity', automatically mark activity as viewed
+  useEffect(() => {
+    if (activeModule === 'activity' && unseenActivityCount > 0) {
+      markActivityViewed();
+    }
+  }, [activeModule, unseenActivityCount, markActivityViewed]);
 
   // Trade deck state
   const [selectedSide, setSelectedSide] = useState<'UP' | 'DOWN'>('UP');
@@ -110,10 +129,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
   const [timeRemaining, setTimeRemaining] = useState('02:44');
   const [notification, setNotification] = useState<string | null>(null);
   const [copiedContract, setCopiedContract] = useState(false);
+  const [cashOutModalPosition, setCashOutModalPosition] = useState<Position | null>(null);
+  const [isClearLedgerModalOpen, setIsClearLedgerModalOpen] = useState(false);
 
   useEffect(() => {
-    loadInitialData();
-  }, [loadInitialData]);
+    if (useMarketStore.getState().markets.length === 0) {
+      loadInitialData();
+    }
+  }, []);
 
   // Deep-link: open challenge room from prop (passed by App on ?challenge= URL param)
   useEffect(() => {
@@ -197,14 +220,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
     updateCountdown();
     const timer = setInterval(updateCountdown, 1000);
     return () => clearInterval(timer);
-  }, [selectedMarket]);
+  }, [selectedMarket?.marketId, selectedMarket?.expiryDate]);
 
   // Filtered positions for unified Activity page (strictly tied to active session wallet)
   const filteredActivityPositions = useMemo(() => {
     if (!userAddress) return [];
     const normalized = userAddress.toLowerCase();
     return positions
-      .filter((pos) => !pos.userAddress || pos.userAddress.toLowerCase() === normalized)
+      .filter((pos) => pos.userAddress && pos.userAddress.toLowerCase() === normalized)
       .filter((pos) => {
         if (activityFilter === 'all') return true;
         if (activityFilter === 'standard') return !pos.marketCategory || pos.marketCategory === 'standard';
@@ -213,6 +236,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
         return true;
       });
   }, [positions, userAddress, activityFilter]);
+
+  const timeRemainingMs = useMemo(() => {
+    if (!selectedMarket) return 999999;
+    const expiry =
+      selectedMarket.expiryDate instanceof Date
+        ? selectedMarket.expiryDate.getTime()
+        : new Date(selectedMarket.expiryDate || Date.now()).getTime();
+    return Math.max(0, expiry - Date.now());
+  }, [selectedMarket?.expiryDate, timeRemaining]);
+
+  const isRoundLocked = timeRemainingMs <= 60 * 1000;
 
   // Calculations for trade deck
   const currentProbability = selectedMarket
@@ -227,6 +261,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
   const roiPercent = (potentialProfit / betAmount) * 100;
 
   const handleTrade = async () => {
+    if (isRoundLocked) {
+      addToast({
+        type: 'warning',
+        title: 'Betting Closed',
+        message: 'Betting is closed 1 minute prior to round settlement (Lock Phase). Please wait for the next round.',
+      });
+      return;
+    }
     if (!userAddress) {
       setIsConnectModalOpen(true);
       return;
@@ -266,7 +308,81 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
     }
   };
 
-  const handleFaucet = () => {
+  const handleConfirmCashOutModal = async (positionId: string) => {
+    const res = await cashOut(positionId);
+    if (res) {
+      try {
+        if (res.unrealizedPnLUSD >= 0) {
+          confetti({
+            particleCount: 65,
+            spread: 70,
+            origin: { y: 0.7 },
+            colors: ['#00C853', '#FFFFFF', '#00E676'],
+          });
+        }
+      } catch {
+        // Safe fallback
+      }
+      const payout = res.cashoutPayoutUSD !== undefined ? res.cashoutPayoutUSD : res.currentValueUSD;
+      setNotification(`Cash-out settled! $${payout.toFixed(2)} USDso credited to your wallet.`);
+      setTimeout(() => setNotification(null), 4000);
+      setCashOutModalPosition(null);
+      return res;
+    }
+    return null;
+  };
+
+  const handleClaimAllWinnings = async () => {
+    const wonPositions = positions.filter((p) => p.status === 'WON');
+    if (wonPositions.length === 0) return;
+
+    try {
+      for (const pos of wonPositions) {
+        await cashOut(pos.id);
+      }
+      try {
+        confetti({
+          particleCount: 80,
+          spread: 80,
+          origin: { y: 0.7 },
+          colors: ['#00C853', '#FFFFFF', '#00E676'],
+        });
+      } catch {}
+      addToast({
+        type: 'success',
+        title: 'All Winnings Claimed!',
+        message: 'All eligible prediction rewards have been settled directly to your wallet.',
+      });
+    } catch (err: any) {
+      addToast({
+        type: 'error',
+        title: 'Claim Failed',
+        message: err.message || 'Could not claim all winnings.',
+      });
+    }
+  };
+
+  const handleFaucet = async () => {
+    if (userAddress) {
+      try {
+        addToast({
+          type: 'info',
+          title: 'Requesting Test Tokens',
+          message: 'Please confirm the on-chain faucet transaction in your wallet...',
+        });
+        const { txHash } = await WalletSigner.requestTestnetFaucet({ userAddress, amountUSD: 100 });
+        await refreshBalances();
+        addToast({
+          type: 'success',
+          title: 'Faucet Claimed!',
+          message: '100 tUSDC has been minted directly into your wallet on Somnia Shannon.',
+          txHash,
+        });
+        return;
+      } catch (err: any) {
+        console.warn('[FLIP] On-chain faucet prompt rejected or failed:', err);
+      }
+    }
     setUserBalance(userBalanceUSD + 500, userGasSTT + 10);
     setNotification('+$500 USDso & +10 STT Gas credited to session wallet!');
     setTimeout(() => setNotification(null), 3000);
@@ -313,8 +429,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
             />
           </div>
 
-          {/* Center Links */}
-          <nav style={{ display: 'flex', alignItems: 'center', gap: '1.75rem' }}>
+          {/* Center Desktop Links */}
+          <nav className="desktop-only" style={{ display: 'flex', alignItems: 'center', gap: '1.75rem' }}>
             <button
               onClick={() => setActiveModule('arena')}
               style={{
@@ -467,7 +583,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
         </div>
 
         {/* Right: Network, Balances, Telegram Faucet, Create Action & Wallet */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
           {/* Create Market / Squad Trigger */}
           <button
             onClick={() => setIsCreateModalOpen(true)}
@@ -476,30 +592,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
               color: '#FFFFFF',
               border: 'none',
               borderRadius: '24px',
-              padding: '0.45rem 1rem',
-              fontSize: '0.82rem',
+              padding: '0.45rem 0.95rem',
+              fontSize: '0.80rem',
               fontFamily: 'var(--font-bobz)',
               fontWeight: 700,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: '0.4rem',
+              gap: '0.35rem',
               transition: 'all 0.2s ease',
             }}
           >
-            <PlusCircle size={14} />
-            <span>Create Market</span>
+            <PlusCircle size={13} />
+            <span>Create</span>
           </button>
 
           {/* Real On-Chain Balances */}
           {userAddress && (
             <div
+              className="badge-live desktop-only"
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem',
-                backgroundColor: '#F3F4F6',
-                padding: '0.4rem 0.8rem',
+                padding: '0.45rem 0.85rem',
+                backgroundColor: 'rgba(0,0,0,0.03)',
                 borderRadius: '8px',
                 border: '1px solid rgba(0,0,0,0.06)',
                 fontSize: '0.84rem',
@@ -521,6 +638,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
             href={SOMNIA_CONFIG.faucetTelegram}
             target="_blank"
             rel="noreferrer"
+            className="desktop-only"
             style={{
               backgroundColor: 'rgba(0, 200, 83, 0.08)',
               color: 'var(--color-green)',
@@ -539,39 +657,124 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
             }}
           >
             <ExternalLink size={12} />
-            <span>Telegram Faucet</span>
+            <span>Faucet</span>
           </a>
 
-          {/* Network Tag */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.80rem', color: '#6B7280' }} className="font-terminal">
-            <span style={{ color: isCorrectNetwork ? 'var(--color-green)' : 'var(--color-red)' }}>●</span>
-            <span>{isCorrectNetwork ? 'Somnia Shannon (50312)' : 'Wrong Network'}</span>
-          </div>
+          {/* Profile Button */}
+          <button
+            onClick={onOpenProfile}
+            title="My Profile"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.35rem',
+              background: 'none', border: '1px solid rgba(0,0,0,0.1)',
+              cursor: 'pointer', padding: '0.45rem 0.65rem', borderRadius: '6px',
+              fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-grey-text)',
+              transition: 'all 0.2s',
+            }}
+          >
+            <User size={13} />
+            <span className="desktop-only">Profile</span>
+          </button>
 
-          {/* Privy & Web3 Account Widget */}
+          {/* Privy & Web3 Account Widget — Click opens Sign Out & Disconnect Modal */}
           {authenticated || userAddress ? (
-            <button
-              onClick={() => setIsPrivyModalOpen(true)}
+            <div
               className="wallet-connected-widget"
-              style={{ cursor: 'pointer', border: 'none', background: 'transparent' }}
-              title="Open Privy Identity & Wallet Hub"
+              style={{
+                cursor: 'pointer',
+                border: 'none',
+                background: 'transparent',
+                display: 'flex',
+                alignItems: 'center',
+                padding: 0,
+              }}
+              title="Click to Sign Out or Disconnect Wallet"
             >
-              <div className="wallet-chain-chip">
+              <div
+                className="wallet-chain-chip"
+                onClick={() => setIsSignOutModalOpen(true)}
+                style={{ cursor: 'pointer' }}
+                title="Click to Sign Out"
+              >
                 <span style={{ color: 'var(--color-green)', fontSize: '0.72rem' }}>●</span>
-                <span>{user?.email?.address ? user.email.address.split('@')[0] : 'Somnia Shannon'}</span>
+                <span>{user?.email?.address ? user.email.address.split('@')[0] : 'Somnia'}</span>
               </div>
-              <div className="wallet-account-pill">
-                <span>{userAddress ? `${userAddress.slice(0, 6)}...${userAddress.slice(-4)}` : 'Wallet Hub'}</span>
+              <div
+                className="wallet-account-pill"
+                onClick={() => setIsSignOutModalOpen(true)}
+                style={{ cursor: 'pointer' }}
+                title="Click to Disconnect Wallet / Sign Out"
+              >
+                <span>{userAddress ? `${userAddress.slice(0, 4)}...${userAddress.slice(-3)}` : 'Wallet'}</span>
               </div>
-            </button>
+            </div>
           ) : (
             <button onClick={() => setIsConnectModalOpen(true)} className="btn-wallet-connect">
-              <Wallet size={14} />
-              <span>SIGN IN / CONNECT</span>
+              <Wallet size={13} />
+              <span>CONNECT</span>
             </button>
           )}
         </div>
       </header>
+
+      {/* Mobile Dashboard Top Tab Bar */}
+      <div className="mobile-dashboard-tabbar">
+        <button
+          onClick={() => setActiveModule('arena')}
+          className={`mobile-tab-btn ${activeModule === 'arena' ? 'is-active' : ''}`}
+        >
+          <Activity size={13} />
+          <span>Trading Arena</span>
+        </button>
+
+        <button
+          onClick={() => setActiveModule('community')}
+          className={`mobile-tab-btn ${activeModule === 'community' ? 'is-active' : ''}`}
+        >
+          <Globe size={13} />
+          <span>Community</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveModule('activity');
+            markActivityViewed();
+          }}
+          className={`mobile-tab-btn ${activeModule === 'activity' ? 'is-active' : ''}`}
+        >
+          <Layers size={13} />
+          <span>Activity</span>
+          {unseenActivityCount > 0 && (
+            <span style={{ backgroundColor: 'var(--color-green)', color: '#000', fontSize: '0.62rem', padding: '0.08rem 0.35rem', borderRadius: '999px', fontWeight: 800 }}>
+              {unseenActivityCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveModule('squads')}
+          className={`mobile-tab-btn ${activeModule === 'squads' ? 'is-active' : ''}`}
+        >
+          <Users size={13} />
+          <span>Squads</span>
+        </button>
+
+        <button
+          onClick={() => setActiveModule('security')}
+          className={`mobile-tab-btn ${activeModule === 'security' ? 'is-active' : ''}`}
+        >
+          <ShieldCheck size={13} />
+          <span>Protocol</span>
+        </button>
+
+        <button
+          onClick={onOpenAnalytics}
+          className="mobile-tab-btn"
+        >
+          <BarChart3 size={13} />
+          <span>Analytics</span>
+        </button>
+      </div>
 
       {/* Network Switch Warning Banner */}
       {userAddress && currentChainId !== null && currentChainId !== SOMNIA_CONFIG.chainId && (
@@ -686,12 +889,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
         onClose={() => setIsPrivyModalOpen(false)}
       />
 
+      {/* Modal: Sign Out & Disconnect Confirmation Modal */}
+      <SignOutConfirmModal
+        isOpen={isSignOutModalOpen}
+        onClose={() => setIsSignOutModalOpen(false)}
+        onSignedOut={onBackToLanding}
+        onOpenProfile={onOpenProfile || (() => setIsPrivyModalOpen(true))}
+      />
+
       {/* ========================================================================= */}
       {/* 2. MAIN BODY (Left Sidebar + Center Canvas)                              */}
       {/* ========================================================================= */}
       <div style={{ display: 'flex', flex: 1 }}>
         {/* LEFT LIGHT SIDEBAR (Matches Screenshot Sidebar) */}
         <aside
+          className="dashboard-sidebar-desktop"
           style={{
             width: '260px',
             minWidth: '260px',
@@ -1012,7 +1224,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
         {/* ========================================================================= */}
         {/* 3. CENTER CONTENT AREA (Matches Screenshot Layout with Tab Rise-In)       */}
         {/* ========================================================================= */}
-        <main key={activeModule} className="tab-content-rise page-rise-in" style={{ flex: 1, padding: '2.5rem 3.5rem 4.5rem 3.5rem', maxWidth: '1280px' }}>
+        <main key={activeModule} className="dashboard-main-canvas tab-content-rise page-rise-in" style={{ flex: 1, padding: '2.5rem 3.5rem 4.5rem 3.5rem', maxWidth: '1280px' }}>
           {/* Breadcrumb & Top Indicator */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
             <button
@@ -1081,11 +1293,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
             </div>
           </div>
 
+          {/* Mobile Market Switcher Chips */}
+          <div className="mobile-market-chip-bar">
+            {markets.map((m) => {
+              const isSelected = selectedMarketId === m.marketId;
+              return (
+                <button
+                  key={m.marketId}
+                  onClick={() => setSelectedMarketId(m.marketId)}
+                  className={`mobile-market-chip ${isSelected ? 'is-active' : ''}`}
+                >
+                  <span>{m.underlyingAsset}/USD</span>
+                  <span className="font-terminal" style={{ fontSize: '0.72rem', opacity: 0.85 }}>
+                    {formatPercent(m.bestUpProbability)} UP
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           {/* ========================================================================= */}
           {/* 4. MAIN CARDS CONTAINER (Wrinkled Deckled Paper Cards on Light Canvas)     */}
           {/* ========================================================================= */}
           {activeModule === 'arena' && (
-            <div key="arena" className="module-enter" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '2rem', alignItems: 'start' }}>
+            <div key="arena" className="dashboard-arena-grid module-enter">
               {/* LEFT COLUMN: Real Market Chart + Round Mechanics + Settlement Invariants */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                 {/* 1. REAL INTERACTIVE MARKET CHART CARD */}
@@ -1213,46 +1444,67 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                     </div>
                   </div>
 
-                  {/* 5-Phase Round Lifecycle Visual Stepper (Dark Sleek Stepper) */}
-                  <div style={{ marginTop: '1.5rem' }}>
-                    <div className="font-terminal" style={{ fontSize: '0.76rem', color: '#9CA3AF', marginBottom: '0.75rem', letterSpacing: '0.04em' }}>
-                      ROUND LIFECYCLE PROGRESSION
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                      {[
-                        { step: '1. Open', status: 'active', desc: 'Accepting Mints' },
-                        { step: '2. Locked', status: 'pending', desc: 'Price Snapshot' },
-                        { step: '3. Resolving', status: 'pending', desc: 'TWAP Compute' },
-                        { step: '4. Settling', status: 'pending', desc: 'Pool Liquidation' },
-                        { step: '5. Closed', status: 'pending', desc: 'Payouts Ready' },
-                      ].map((phase, idx) => (
-                        <div
-                          key={phase.step}
-                          style={{
-                            backgroundColor: idx === 0 ? '#1F1F1F' : '#111111',
-                            color: idx === 0 ? '#FFFFFF' : '#6B7280',
-                            borderRadius: '6px',
-                            padding: '0.65rem 0.5rem',
-                            textAlign: 'center',
-                            border: idx === 0 ? '1px solid rgba(0, 200, 83, 0.5)' : '1px dashed rgba(255, 255, 255, 0.08)',
-                            transition: 'all 0.2s ease',
-                          }}
-                        >
-                          <div className="font-bobz" style={{ fontSize: '0.82rem', fontWeight: 800, marginBottom: '0.2rem', color: idx === 0 ? 'var(--color-green)' : '#9CA3AF' }}>
-                            {phase.step}
-                          </div>
-                          <div className="font-subtext" style={{ fontSize: '0.72rem', color: '#6B7280' }}>
-                            {phase.desc}
-                          </div>
+                  {/* 5-Phase Round Lifecycle Visual Stepper — live, driven by timeRemainingMs which ticks every second */}
+                  {(() => {
+                    const phases = [
+                      { step: '1. Open',      desc: 'Accepting Mints',  color: 'var(--color-green)', border: 'rgba(0,200,83,0.5)' },
+                      { step: '2. Locked',    desc: 'Price Snapshot',   color: '#FACC15',            border: 'rgba(250,204,21,0.5)' },
+                      { step: '3. Resolving', desc: 'TWAP Compute',     color: '#F97316',            border: 'rgba(249,115,22,0.5)' },
+                      { step: '4. Settling',  desc: 'Pool Liquidation', color: '#EF4444',            border: 'rgba(239,68,68,0.5)' },
+                      { step: '5. Closed',    desc: 'Payouts Ready',    color: '#A78BFA',            border: 'rgba(167,139,250,0.5)' },
+                    ];
+                    const activePhase =
+                      timeRemainingMs <= 0       ? 4
+                      : timeRemainingMs <= 10000 ? 3
+                      : timeRemainingMs <= 30000 ? 2
+                      : timeRemainingMs <= 60000 ? 1
+                      : 0;
+                    const phaseDescriptions = [
+                      'Round is open — place your UP or DOWN prediction before the 60-second lock.',
+                      'Betting locked — price snapshot is being captured for this epoch.',
+                      'Oracle resolving — TWAP price being computed against the strike target.',
+                      'Settlement in progress — pool liquidating and payouts being routed.',
+                      'Round closed — all payouts are ready. Check your Activity ledger to claim.',
+                    ];
+                    return (
+                      <div style={{ marginTop: '1.5rem' }}>
+                        <div className="font-terminal" style={{ fontSize: '0.76rem', color: '#9CA3AF', marginBottom: '0.75rem', letterSpacing: '0.04em' }}>
+                          ROUND LIFECYCLE PROGRESSION
                         </div>
-                      ))}
-                    </div>
-
-                    <div className="font-subtext" style={{ fontSize: '0.84rem', color: '#9CA3AF', lineHeight: 1.5 }}>
-                      Current round locks orders 30 seconds prior to epoch resolution to protect traders against oracle latency and sandwich attacks.
-                    </div>
-                  </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                          {phases.map((phase, idx) => {
+                            const isActive = idx === activePhase;
+                            const isDone = idx < activePhase;
+                            return (
+                              <div
+                                key={phase.step}
+                                style={{
+                                  backgroundColor: isActive ? '#1F1F1F' : isDone ? '#161616' : '#111111',
+                                  borderRadius: '6px',
+                                  padding: '0.65rem 0.5rem',
+                                  textAlign: 'center',
+                                  border: isActive ? `1px solid ${phase.border}` : isDone ? '1px solid rgba(255,255,255,0.1)' : '1px dashed rgba(255,255,255,0.06)',
+                                  transition: 'all 0.4s ease',
+                                  opacity: isDone ? 0.5 : 1,
+                                  boxShadow: isActive ? `0 0 10px ${phase.border}` : 'none',
+                                }}
+                              >
+                                <div className="font-bobz" style={{ fontSize: '0.82rem', fontWeight: 800, marginBottom: '0.2rem', color: isActive ? phase.color : isDone ? '#374151' : '#6B7280' }}>
+                                  {isDone ? '✓ ' : ''}{phase.step}
+                                </div>
+                                <div className="font-subtext" style={{ fontSize: '0.72rem', color: isActive ? '#D1D5DB' : '#4B5563' }}>
+                                  {phase.desc}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="font-subtext" style={{ fontSize: '0.84rem', color: '#9CA3AF', lineHeight: 1.5 }}>
+                          {phaseDescriptions[activePhase]}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* 3. PARIMUTUEL SETTLEMENT MATHEMATICS CARD */}
@@ -1355,7 +1607,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.35rem' }}>
                     <span className="font-bobz" style={{ fontSize: '1.15rem', fontWeight: 800 }}>ORDER EXECUTION</span>
                     <span className="font-terminal" style={{ fontSize: '0.78rem', color: 'var(--color-green)', fontWeight: 700 }}>
-                      ● ZERO SLIPPAGE
+                      ZERO SLIPPAGE
                     </span>
                   </div>
 
@@ -1477,10 +1729,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                     </div>
                   </div>
 
+                  {/* Lock Phase Notice */}
+                  {isRoundLocked && (
+                    <div
+                      style={{
+                        backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                        border: '1px solid rgba(239, 68, 68, 0.25)',
+                        borderRadius: '10px',
+                        padding: '0.65rem 0.85rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.55rem',
+                        marginBottom: '1rem',
+                        color: '#DC2626',
+                        fontSize: '0.78rem',
+                        fontFamily: 'var(--font-bobz)',
+                      }}
+                    >
+                      <Lock size={15} style={{ flexShrink: 0 }} />
+                      <span>
+                        LOCK PHASE: Betting closed 60s before settlement to preserve market integrity.
+                      </span>
+                    </div>
+                  )}
+
                   {/* Execute Button */}
                   <button
                     onClick={handleTrade}
-                    disabled={isExecuting}
+                    disabled={isExecuting || isRoundLocked}
                     className="btn-launch-black"
                     style={{
                       width: '100%',
@@ -1490,15 +1766,122 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontSize: '0.92rem',
+                      backgroundColor: isRoundLocked ? '#9CA3AF' : undefined,
+                      cursor: isRoundLocked ? 'not-allowed' : 'pointer',
+                      border: isRoundLocked ? '1px solid #D1D5DB' : undefined,
+                      boxShadow: isRoundLocked ? 'none' : undefined,
                     }}
                   >
                     {isExecuting ? (
                       <span>Confirming on Somnia...</span>
+                    ) : isRoundLocked ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                        <Lock size={15} />
+                        <span>BETTING CLOSED ({timeRemaining} TO SETTLE)</span>
+                      </div>
                     ) : (
                       <span>MINT {selectedSide} SHARES (${betAmount})</span>
                     )}
                   </button>
                 </div>
+
+                {/* Active Predictions Quick-Card on this Market */}
+                {activePositions
+                  .filter((p) => selectedMarket && p.marketId === selectedMarket.marketId)
+                  .map((wager) => {
+                    const payout =
+                      wager.cashoutPayoutUSD !== undefined ? wager.cashoutPayoutUSD : wager.currentValueUSD;
+                    const pnl = wager.unrealizedPnLUSD || 0;
+                    const isProfit = pnl >= 0;
+                    return (
+                      <div
+                        key={wager.id}
+                        style={{
+                          backgroundColor: '#0F0F0F',
+                          border: `1px solid ${isProfit ? 'rgba(0, 200, 83, 0.35)' : 'rgba(255, 59, 105, 0.35)'}`,
+                          borderRadius: '12px',
+                          padding: '1.25rem',
+                          boxShadow: isProfit ? '0 0 24px rgba(0, 200, 83, 0.09)' : 'none',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                            <span
+                              style={{
+                                width: '7px',
+                                height: '7px',
+                                borderRadius: '50%',
+                                backgroundColor: 'var(--color-green)',
+                                display: 'inline-block',
+                                animation: 'pulse 1.8s infinite',
+                              }}
+                            />
+                            <span className="font-bobz" style={{ fontSize: '0.86rem', fontWeight: 800, color: '#FFFFFF' }}>
+                              YOUR ACTIVE PREDICTION
+                            </span>
+                          </div>
+                          <span
+                            className="font-bobz"
+                            style={{
+                              fontSize: '0.74rem',
+                              fontWeight: 800,
+                              padding: '0.2rem 0.6rem',
+                              borderRadius: '4px',
+                              backgroundColor: wager.side === 'UP' ? 'rgba(0,200,83,0.15)' : 'rgba(255,59,105,0.15)',
+                              color: wager.side === 'UP' ? 'var(--color-green)' : 'var(--color-red)',
+                              border: `1px solid ${wager.side === 'UP' ? 'rgba(0,200,83,0.3)' : 'rgba(255,59,105,0.3)'}`,
+                            }}
+                          >
+                            {wager.side === 'UP' ? '▲ PREDICTED UP' : '▼ PREDICTED DOWN'}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', marginBottom: '0.85rem' }}>
+                          <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '0.65rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <div className="font-subtext" style={{ color: '#9CA3AF', fontSize: '0.68rem', marginBottom: '0.2rem' }}>ENTRY SPOT</div>
+                            <div className="font-terminal" style={{ color: '#FFFFFF', fontWeight: 800, fontSize: '0.95rem' }}>
+                              {wager.entrySpotPrice
+                                ? wager.entrySpotPrice >= 1000
+                                  ? `$${wager.entrySpotPrice.toLocaleString()}`
+                                  : `$${wager.entrySpotPrice.toFixed(2)}`
+                                : '-'}
+                            </div>
+                          </div>
+
+                          <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '0.65rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <div className="font-subtext" style={{ color: '#9CA3AF', fontSize: '0.68rem', marginBottom: '0.2rem' }}>EST. CASHOUT</div>
+                            <div className="font-terminal" style={{ color: isProfit ? 'var(--color-green)' : 'var(--color-red)', fontWeight: 800, fontSize: '0.95rem' }}>
+                              ${payout.toFixed(2)} ({isProfit ? '+' : ''}${pnl.toFixed(2)})
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => setCashOutModalPosition(wager)}
+                          className="btn-launch-black"
+                          style={{
+                            width: '100%',
+                            backgroundColor: isProfit ? 'var(--color-green)' : '#FFFFFF',
+                            color: '#000000',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '0.65rem',
+                            fontSize: '0.82rem',
+                            fontFamily: 'var(--font-bobz)',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.4rem',
+                          }}
+                        >
+                          <Coins size={14} />
+                          <span>CASH OUT POSITION (${payout.toFixed(2)})</span>
+                        </button>
+                      </div>
+                    );
+                  })}
 
                 {/* 5. ON-CHAIN SPECS & CONTRACT PROOF (Dark Sleek Style Matching Screenshot) */}
                 <div
@@ -1512,7 +1895,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                     <span className="font-bobz" style={{ fontSize: '1.05rem', fontWeight: 800, color: '#FFFFFF' }}>ESCROW SPECIFICATIONS</span>
-                    <span className="font-terminal" style={{ fontSize: '0.74rem', color: 'var(--color-green)', fontWeight: 700 }}>● VERIFIED</span>
+                    <span className="font-terminal" style={{ fontSize: '0.74rem', color: 'var(--color-green)', fontWeight: 700 }}>VERIFIED</span>
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.84rem', marginBottom: '1.25rem' }}>
@@ -1624,13 +2007,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                  {positions.length > 0 && (
+                  {filteredActivityPositions.some((p) => p.status !== 'ACTIVE' && p.status !== 'WON') && (
                     <button
-                      onClick={() => {
-                        if (confirm('Clear local activity ledger records?')) {
-                          clearPositions();
-                        }
-                      }}
+                      onClick={() => setIsClearLedgerModalOpen(true)}
                       style={{
                         padding: '0.35rem 0.75rem',
                         borderRadius: '6px',
@@ -1640,9 +2019,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                         fontSize: '0.74rem',
                         fontFamily: 'var(--font-terminal)',
                         cursor: 'pointer',
+                        transition: 'all 0.15s ease',
                       }}
+                      title="Remove settled history records while preserving active running bets"
                     >
-                      CLEAR LEDGER
+                      CLEAR RESOLVED
                     </button>
                   )}
 
@@ -1670,6 +2051,61 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                       </button>
                     ))}
                   </div>
+
+                  {/* Unclaimed Payouts / Claim All Action */}
+                  {userAddress && positions.some((p) => p.status === 'WON') ? (
+                    <button
+                      onClick={handleClaimAllWinnings}
+                      style={{
+                        padding: '0.45rem 1.1rem',
+                        borderRadius: '24px',
+                        border: 'none',
+                        backgroundColor: 'var(--color-green)',
+                        color: '#000000',
+                        fontSize: '0.80rem',
+                        fontFamily: 'var(--font-bobz)',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.45rem',
+                        boxShadow: '0 2px 12px rgba(0, 200, 83, 0.35)',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <CheckCircle2 size={14} />
+                      <span>
+                        CLAIM ALL WINNINGS ($
+                        {positions
+                          .filter((p) => p.status === 'WON')
+                          .reduce((sum, p) => sum + (p.potentialPayoutUSD || 0), 0)
+                          .toFixed(2)}
+                        )
+                      </span>
+                    </button>
+                  ) : (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        fontSize: '0.74rem',
+                        color: '#6B7280',
+                        fontFamily: 'var(--font-terminal)',
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: '50%',
+                          backgroundColor: 'var(--color-green)',
+                          display: 'inline-block',
+                        }}
+                      />
+                      <span>Non-Custodial Somnia Ledger</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1685,10 +2121,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 700, fontSize: '0.90rem', color: 'var(--color-black)', marginBottom: '0.35rem' }}>
                   <ShieldCheck size={16} color="var(--color-green)" />
-                  <span>How Your Activity &amp; Payouts Operate</span>
+                  <span>How Your Activity, Collateral &amp; Payouts Operate</span>
                 </div>
                 <div style={{ fontSize: '0.82rem', color: '#6B7280', lineHeight: 1.55 }}>
-                  Active wagers lock collateral in decentralized Somnia smart contracts. You can <strong>Cash Out</strong> before epoch expiration or wait for TWAP resolution to <strong>Claim Payout</strong> ($1.00 USDso per winning share). All settlement transactions are permanently logged on SomniaScan.
+                  FLIP is 100% non-custodial on Somnia Shannon. All betting collateral and settled winnings are credited directly into your connected Web3 wallet. When a round resolves in your favor, click <strong>Claim Payout</strong> to redeem your rewards directly to your wallet.
                 </div>
               </div>
 
@@ -1728,7 +2164,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                         <th style={{ padding: '0.75rem', fontFamily: 'var(--font-bobz)' }}>EVENT MARKET</th>
                         <th style={{ padding: '0.75rem', fontFamily: 'var(--font-bobz)' }}>SIDE</th>
                         <th style={{ padding: '0.75rem', fontFamily: 'var(--font-bobz)' }}>INVESTED</th>
-                        <th style={{ padding: '0.75rem', fontFamily: 'var(--font-bobz)' }}>SHARES / PAYOUT</th>
+                        <th style={{ padding: '0.75rem', fontFamily: 'var(--font-bobz)' }}>PAYOUT / RETURN</th>
                         <th style={{ padding: '0.75rem', fontFamily: 'var(--font-bobz)' }}>STATUS</th>
                         <th style={{ padding: '0.75rem', fontFamily: 'var(--font-bobz)' }}>ON-CHAIN TX</th>
                         <th style={{ padding: '0.75rem', fontFamily: 'var(--font-bobz)', textAlign: 'right' }}>ACTION</th>
@@ -1783,17 +2219,174 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
 
                             {/* Invested */}
                             <td className="font-terminal" style={{ padding: '0.85rem 0.75rem', fontWeight: 700 }}>
-                              ${pos.investedUSD.toFixed(2)}
+                              <div>${pos.investedUSD.toFixed(2)}</div>
+                              {pos.entrySpotPrice && (
+                                <div className="font-terminal" style={{ fontSize: '0.68rem', color: '#6B7280', marginTop: '0.15rem' }}>
+                                  Entry: {pos.entrySpotPrice >= 1000 ? `$${pos.entrySpotPrice.toLocaleString()}` : `$${pos.entrySpotPrice.toFixed(2)}`}
+                                </div>
+                              )}
                             </td>
 
-                            {/* Payout */}
+                            {/* Payout / Return */}
                             <td style={{ padding: '0.85rem 0.75rem' }}>
-                              <div className="font-terminal" style={{ color: 'var(--color-green)', fontWeight: 800 }}>
-                                ${pos.potentialPayoutUSD.toFixed(2)}
-                              </div>
-                              <div className="font-subtext" style={{ fontSize: '0.74rem', color: '#9CA3AF' }}>
-                                {pos.contractsCount.toFixed(1)} shares ({pos.potentialMultiplier.toFixed(2)}x)
-                              </div>
+                              {pos.status === 'CASHED_OUT' ? (
+                                (() => {
+                                  const settledAmount =
+                                    pos.cashoutPayoutUSD !== undefined
+                                      ? pos.cashoutPayoutUSD
+                                      : pos.currentValueUSD;
+                                  const pnl =
+                                    pos.unrealizedPnLUSD !== undefined
+                                      ? pos.unrealizedPnLUSD
+                                      : settledAmount - pos.investedUSD;
+                                  const isProfit = pnl >= 0;
+                                  const pnlPct =
+                                    pos.investedUSD > 0 ? (pnl / pos.investedUSD) * 100 : 0;
+
+                                  return (
+                                    <>
+                                      <div
+                                        className="font-terminal"
+                                        style={{
+                                          color: isProfit ? 'var(--color-green)' : 'var(--color-red)',
+                                          fontWeight: 800,
+                                          fontSize: '0.90rem',
+                                        }}
+                                      >
+                                        ${settledAmount.toFixed(2)} cashed out
+                                      </div>
+                                      <div
+                                        className="font-terminal"
+                                        style={{
+                                          fontSize: '0.72rem',
+                                          color: isProfit ? 'var(--color-green)' : 'var(--color-red)',
+                                          fontWeight: 700,
+                                          marginTop: '2px',
+                                        }}
+                                      >
+                                        {isProfit ? '+' : ''}${pnl.toFixed(2)} ({isProfit ? '+' : ''}
+                                        {pnlPct.toFixed(1)}%)
+                                      </div>
+                                      <div
+                                        className="font-subtext"
+                                        style={{ fontSize: '0.68rem', color: '#9CA3AF', marginTop: '2px' }}
+                                      >
+                                        Early exit before close
+                                      </div>
+                                    </>
+                                  );
+                                })()
+                              ) : pos.status === 'WON' || pos.status === 'CLAIMED' ? (
+                                (() => {
+                                  const isClaimed = pos.status === 'CLAIMED';
+                                  const profit = pos.potentialPayoutUSD - pos.investedUSD;
+                                  return (
+                                    <>
+                                      <div
+                                        className="font-terminal"
+                                        style={{
+                                          color: 'var(--color-green)',
+                                          fontWeight: 800,
+                                          fontSize: '0.90rem',
+                                        }}
+                                      >
+                                        ${pos.potentialPayoutUSD.toFixed(2)}{' '}
+                                        <span style={{ fontSize: '0.70rem', fontWeight: 600 }}>
+                                          {isClaimed ? 'claimed' : 'won'}
+                                        </span>
+                                      </div>
+                                      <div
+                                        className="font-terminal"
+                                        style={{
+                                          fontSize: '0.72rem',
+                                          color: 'var(--color-green)',
+                                          fontWeight: 700,
+                                          marginTop: '2px',
+                                        }}
+                                      >
+                                        +${profit.toFixed(2)} ({pos.potentialMultiplier.toFixed(2)}x)
+                                      </div>
+                                      <div
+                                        className="font-subtext"
+                                        style={{ fontSize: '0.68rem', color: '#9CA3AF', marginTop: '2px' }}
+                                      >
+                                        {pos.contractsCount.toFixed(1)} shares redeemed at $1.00
+                                      </div>
+                                    </>
+                                  );
+                                })()
+                              ) : pos.status === 'LOST' ? (
+                                <>
+                                  <div
+                                    className="font-terminal"
+                                    style={{ color: '#9CA3AF', fontWeight: 800, fontSize: '0.90rem' }}
+                                  >
+                                    $0.00
+                                  </div>
+                                  <div
+                                    className="font-terminal"
+                                    style={{
+                                      fontSize: '0.72rem',
+                                      color: 'var(--color-red)',
+                                      fontWeight: 700,
+                                      marginTop: '2px',
+                                    }}
+                                  >
+                                    -${pos.investedUSD.toFixed(2)} (-100%)
+                                  </div>
+                                  <div
+                                    className="font-subtext"
+                                    style={{ fontSize: '0.68rem', color: '#9CA3AF', marginTop: '2px' }}
+                                  >
+                                    Expired out-of-the-money
+                                  </div>
+                                </>
+                              ) : (
+                                /* ACTIVE position */
+                                <>
+                                  <div
+                                    className="font-terminal"
+                                    style={{
+                                      color:
+                                        (pos.unrealizedPnLUSD || 0) >= 0
+                                          ? 'var(--color-green)'
+                                          : 'var(--color-red)',
+                                      fontWeight: 800,
+                                      fontSize: '0.90rem',
+                                    }}
+                                  >
+                                    ${(pos.cashoutPayoutUSD !== undefined
+                                      ? pos.cashoutPayoutUSD
+                                      : pos.currentValueUSD
+                                    ).toFixed(2)}{' '}
+                                    <span style={{ fontSize: '0.70rem', fontWeight: 600 }}>live</span>
+                                  </div>
+                                  <div
+                                    className="font-terminal"
+                                    style={{
+                                      fontSize: '0.72rem',
+                                      color:
+                                        (pos.unrealizedPnLUSD || 0) >= 0
+                                          ? 'var(--color-green)'
+                                          : 'var(--color-red)',
+                                      fontWeight: 700,
+                                      marginTop: '2px',
+                                    }}
+                                  >
+                                    {(pos.unrealizedPnLUSD || 0) >= 0 ? '+' : ''}$
+                                    {(pos.unrealizedPnLUSD || 0).toFixed(2)} (
+                                    {(pos.unrealizedPnLPercent || 0) >= 0 ? '+' : ''}
+                                    {(pos.unrealizedPnLPercent || 0).toFixed(1)}%)
+                                  </div>
+                                  <div
+                                    className="font-subtext"
+                                    style={{ fontSize: '0.68rem', color: '#9CA3AF', marginTop: '2px' }}
+                                  >
+                                    Max if held: ${pos.potentialPayoutUSD.toFixed(2)} (
+                                    {pos.potentialMultiplier.toFixed(2)}x)
+                                  </div>
+                                </>
+                              )}
                             </td>
 
                             {/* Status */}
@@ -1805,31 +2398,41 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                                   padding: '0.2rem 0.5rem',
                                   borderRadius: '4px',
                                   fontFamily: "'Space Mono', monospace",
-                                  backgroundColor:
+                                   backgroundColor:
                                     pos.status === 'ACTIVE'
                                       ? 'rgba(56, 189, 248, 0.12)'
                                       : pos.status === 'WON'
                                       ? 'rgba(0, 255, 102, 0.12)'
+                                      : pos.status === 'CLAIMED'
+                                      ? 'rgba(0, 255, 102, 0.08)'
                                       : pos.status === 'CASHED_OUT'
                                       ? 'rgba(156, 163, 175, 0.15)'
+                                      : pos.status === 'WITHDRAWN'
+                                      ? 'rgba(168, 85, 247, 0.15)'
                                       : 'rgba(255, 59, 105, 0.12)',
                                   color:
                                     pos.status === 'ACTIVE'
                                       ? '#0284C7'
-                                      : pos.status === 'WON'
+                                      : pos.status === 'WON' || pos.status === 'CLAIMED'
                                       ? '#059669'
                                       : pos.status === 'CASHED_OUT'
                                       ? '#4B5563'
+                                      : pos.status === 'WITHDRAWN'
+                                      ? '#7C3AED'
                                       : '#DC2626',
                                 }}
                               >
                                 {pos.status === 'ACTIVE'
-                                  ? '● ACTIVE IN ROUND'
+                                  ? 'ACTIVE IN ROUND'
                                   : pos.status === 'WON'
-                                  ? '✓ WON (CLAIMABLE)'
+                                  ? 'WON (CLAIMABLE)'
+                                  : pos.status === 'CLAIMED'
+                                  ? 'CLAIMED'
                                   : pos.status === 'CASHED_OUT'
-                                  ? '✓ CLAIMED'
-                                  : '✕ LOST'}
+                                  ? 'CASHED OUT'
+                                  : pos.status === 'WITHDRAWN'
+                                  ? 'WITHDRAWN TO WALLET'
+                                  : 'LOST'}
                               </span>
                             </td>
 
@@ -1866,7 +2469,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                             <td style={{ padding: '0.85rem 0.75rem', textAlign: 'right' }}>
                               {pos.status === 'ACTIVE' ? (
                                 <button
-                                  onClick={() => handleCashOutWithConfetti(pos.id)}
+                                  onClick={() => setCashOutModalPosition(pos)}
                                   className="btn-launch-black"
                                   style={{ padding: '0.38rem 0.85rem', fontSize: '0.74rem' }}
                                 >
@@ -1889,6 +2492,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                                 >
                                   <span>CLAIM PAYOUT</span>
                                 </button>
+                              ) : pos.status === 'WITHDRAWN' ? (
+                                <span
+                                  className="font-terminal"
+                                  style={{
+                                    fontSize: '0.72rem',
+                                    color: '#7C3AED',
+                                    fontWeight: 700,
+                                    backgroundColor: 'rgba(124, 58, 237, 0.08)',
+                                    padding: '0.25rem 0.6rem',
+                                    borderRadius: '4px',
+                                  }}
+                                >
+                                  DISBURSED
+                                </span>
                               ) : (
                                 <span className="font-terminal" style={{ fontSize: '0.74rem', color: '#9CA3AF' }}>
                                   Settled
@@ -2339,7 +2956,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                             </h3>
 
                             <div style={{ fontSize: '0.90rem', color: 'var(--color-grey-text)', marginBottom: '1rem' }}>
-                              Strike Target: <strong>${c.strikePrice.toLocaleString()}</strong> · Entry: <strong>${c.entryFeeUSD} tUSDC</strong>
+                              Strike Target: <strong>${c.strikePrice.toLocaleString()}</strong> &nbsp;|&nbsp; Entry: <strong>${c.entryFeeUSD} tUSDC</strong>
                             </div>
 
                             {/* Pot & Players Progress */}
@@ -2398,7 +3015,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                 <span className="font-bobz" style={{ fontSize: '1.25rem' }}>PROTOCOL ARCHITECTURE & VERIFICATION</span>
                 <span style={{ fontSize: '0.78rem', color: 'var(--color-green)', fontWeight: 700 }} className="font-terminal">
-                  ● Verified on Shannon (50312)
+                  Verified on Shannon (50312)
                 </span>
               </div>
 
@@ -2409,7 +3026,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed rgba(0,0,0,0.08)', paddingBottom: '0.65rem' }}>
                   <span className="font-subtext" style={{ color: '#6B7280' }}>Collateral Standard</span>
-                  <span className="font-terminal" style={{ fontWeight: 700, color: 'var(--color-green)' }}>tUSDC (6 Decimals) · Shannon Testnet</span>
+                  <span className="font-terminal" style={{ fontWeight: 700, color: 'var(--color-green)' }}>tUSDC (6 Decimals) | Shannon Testnet</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed rgba(0,0,0,0.08)', paddingBottom: '0.65rem' }}>
                   <span className="font-subtext" style={{ color: '#6B7280' }}>Oracle Coprocessor</span>
@@ -2483,6 +3100,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
           © 2026 FLIP. High-velocity binary prediction markets on Somnia Shannon Testnet.
         </div>
       </footer>
+
+      {/* Early Cash-Out Settlement Modal */}
+      <CashOutModal
+        isOpen={!!cashOutModalPosition}
+        position={cashOutModalPosition}
+        onClose={() => setCashOutModalPosition(null)}
+        onConfirmCashOut={handleConfirmCashOutModal}
+      />
+
+      {/* Clear Settled Ledger Confirmation Modal */}
+      <ClearLedgerModal
+        isOpen={isClearLedgerModalOpen}
+        onClose={() => setIsClearLedgerModalOpen(false)}
+        onConfirm={() => {
+          clearPositions();
+          addToast({
+            type: 'info',
+            title: 'Ledger Cleared',
+            message: 'Settled trades removed. Active running bets have been preserved.',
+          });
+        }}
+        settledCount={positions.filter((p) => p.status !== 'ACTIVE' && p.status !== 'WON').length}
+        activeCount={positions.filter((p) => p.status === 'ACTIVE').length}
+        unclaimedCount={positions.filter((p) => p.status === 'WON').length}
+      />
     </div>
   );
 };

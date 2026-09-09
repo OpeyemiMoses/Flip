@@ -4,7 +4,7 @@
  * and connects with Somnia Shannon Testnet RPC for on-chain settlement.
  */
 
-import { createPublicClient, http, formatUnits } from 'viem';
+import { createPublicClient, http, fallback, formatUnits } from 'viem';
 import { SomniaMarkets, SOMNIA_TESTNET_ADDRESSES } from '@somnia-chain/markets-sdk';
 import { somniaShannon as somniaSdkChain } from '@somnia-chain/markets-sdk/chains';
 import { somniaShannon, SOMNIA_CONFIG } from '../contracts/chain';
@@ -110,7 +110,10 @@ export function formatPercent(val: number): string {
  */
 export const publicClient = createPublicClient({
   chain: somniaShannon,
-  transport: http(SOMNIA_CONFIG.rpcUrl),
+  transport: fallback([
+    http('https://api.infra.testnet.somnia.network'),
+    http('https://dream-rpc.somnia.network'),
+  ]),
 });
 
 /**
@@ -195,6 +198,64 @@ export async function fetchLiveCryptoPrices(): Promise<Record<string, LivePriceD
   }
 }
 
+/**
+ * Computes dynamic implied probability for a binary prediction market round.
+ * Factors in:
+ * 1. Price distance from strike: (spotPrice - strikePrice) / strikePrice
+ * 2. Time decay (remaining time in round)
+ * 3. Asset-specific volatility
+ *
+ * Implements standard logistic curve P(UP) = 1 / (1 + exp(-k * z))
+ * where z = (spot - strike) / (strike * vol * sqrt(timeRatio))
+ */
+export function computeDynamicMarketProbability(params: {
+  spotPrice: number;
+  strikePrice: number;
+  expiryDate: Date | number;
+  underlyingAsset: string;
+  now?: number;
+}): { upProb: number; downProb: number } {
+  const { spotPrice, strikePrice, expiryDate, underlyingAsset, now = Date.now() } = params;
+
+  if (!spotPrice || !strikePrice || strikePrice <= 0) {
+    return { upProb: 0.5, downProb: 0.5 };
+  }
+
+  const expiryMs = typeof expiryDate === 'number' ? expiryDate : expiryDate.getTime();
+  const timeRemainingMs = Math.max(0, expiryMs - now);
+
+  // Standard epoch duration (15m for standard, 1h for custom)
+  const totalDurationMs = 15 * 60 * 1000;
+  // Normalized time remaining ratio (clamped between 0.015 and 1.0)
+  const timeRatio = Math.min(1.0, Math.max(0.015, timeRemainingMs / totalDurationMs));
+
+  // Volatility calibration for 15-minute intervals per asset
+  let vol = 0.0018; // BTC ~0.18%
+  const sym = (underlyingAsset || '').toUpperCase();
+  if (sym === 'ETH') vol = 0.0024;
+  else if (sym === 'SOL') vol = 0.0040;
+  else if (sym === 'SUI') vol = 0.0055;
+  else if (sym === 'SOMI' || sym === 'SOMNIA') vol = 0.0060;
+
+  // Normalized distance in standard deviations (with square-root time scaling)
+  const distFraction = (spotPrice - strikePrice) / strikePrice;
+  const effectiveSigma = vol * Math.sqrt(timeRatio);
+  const z = distFraction / (effectiveSigma || 0.0001);
+
+  // Logistic sigmoid approximation of Gaussian normal CDF: 1 / (1 + e^(-1.7 * z))
+  const k = 1.7;
+  const rawProb = 1 / (1 + Math.exp(-k * z));
+
+  // Clamp between 0.01 and 0.99:
+  // - 0.99 upper: deep-winning positions can approach near-full payout (avoids the "cashout stops growing" plateau)
+  // - 0.01 lower: deep-losing positions CAN approach zero payout (no artificial floor)
+  // We stop at 0.99 not 1.0 because a binary market always retains a thin liquidity spread until settlement
+  const upProb = Number(Math.min(0.99, Math.max(0.01, rawProb)).toFixed(2));
+  const downProb = Number((1 - upProb).toFixed(2));
+
+  return { upProb, downProb };
+}
+
 export function calculateStrikeAndProbability(currentPrice: number, asset: string) {
   let strikePrice: number;
 
@@ -217,17 +278,33 @@ export function calculateStrikeAndProbability(currentPrice: number, asset: strin
     strikePrice = currentPrice >= 10 ? Math.round(currentPrice) + 1 : Number((currentPrice * 1.005).toFixed(4));
   }
 
-  const delta = currentPrice - strikePrice;
-  const deltaPercent = delta / (currentPrice || 1);
-
-  // Balanced 44% - 56% initial probability distribution
-  const upProbability = Math.min(Math.max(0.50 + deltaPercent * 10, 0.44), 0.56);
-  const downProbability = 1 - upProbability;
+  const { upProb, downProb } = computeDynamicMarketProbability({
+    spotPrice: currentPrice,
+    strikePrice,
+    expiryDate: Date.now() + 15 * 60 * 1000,
+    underlyingAsset: asset,
+  });
 
   return {
     strikePrice,
-    bestUpProbability: Number(upProbability.toFixed(2)),
-    bestDownProbability: Number(downProbability.toFixed(2)),
+    bestUpProbability: upProb,
+    bestDownProbability: downProb,
+  };
+}
+
+export const STANDARD_ROUND_DURATION_MS = 15 * 60 * 1000;
+
+export function getCanonical15mEpoch(now = Date.now()): {
+  expiryDate: Date;
+  expiryTimestampNs: bigint;
+  roundNumber: number;
+} {
+  const epochIndex = Math.floor(now / STANDARD_ROUND_DURATION_MS);
+  const expiryMs = (epochIndex + 1) * STANDARD_ROUND_DURATION_MS;
+  return {
+    expiryDate: new Date(expiryMs),
+    expiryTimestampNs: BigInt(expiryMs) * 1_000_000n,
+    roundNumber: (epochIndex % 10000) + 1,
   };
 }
 
@@ -245,6 +322,7 @@ export async function fetchLiveBinaryMarkets(): Promise<BinaryMarket[]> {
 
   const livePrices = await fetchLiveCryptoPrices();
   const now = Date.now();
+  const epoch = getCanonical15mEpoch(now);
 
   const btcPrice = livePrices.BTC?.price || 79052.0;
   const ethPrice = livePrices.ETH?.price || 2482.0;
@@ -273,9 +351,9 @@ export async function fetchLiveBinaryMarkets(): Promise<BinaryMarket[]> {
       low24h: livePrices.BTC?.low24h ?? 79014.0,
       lastClosePrice: Number((btcPrice * 0.9995).toFixed(2)),
       previousRoundWinningOutcome: 'UP',
-      roundNumber: 84,
-      expiryTimestampNs: BigInt(now + 12 * 60 * 1000) * 1_000_000n,
-      expiryDate: new Date(now + 12 * 60 * 1000),
+      roundNumber: epoch.roundNumber,
+      expiryTimestampNs: epoch.expiryTimestampNs,
+      expiryDate: epoch.expiryDate,
       isResolved: false,
       collateralToken: 'tUSDC',
       upTokenId: '1',
@@ -300,9 +378,9 @@ export async function fetchLiveBinaryMarkets(): Promise<BinaryMarket[]> {
       low24h: livePrices.ETH?.low24h ?? 2473.5,
       lastClosePrice: Number((ethPrice * 1.0006).toFixed(2)),
       previousRoundWinningOutcome: 'DOWN',
-      roundNumber: 84,
-      expiryTimestampNs: BigInt(now + 8 * 60 * 1000) * 1_000_000n,
-      expiryDate: new Date(now + 8 * 60 * 1000),
+      roundNumber: epoch.roundNumber,
+      expiryTimestampNs: epoch.expiryTimestampNs,
+      expiryDate: epoch.expiryDate,
       isResolved: false,
       collateralToken: 'tUSDC',
       upTokenId: '3',
@@ -327,9 +405,9 @@ export async function fetchLiveBinaryMarkets(): Promise<BinaryMarket[]> {
       low24h: livePrices.SOL?.low24h ?? 103.95,
       lastClosePrice: Number((solPrice * 0.9988).toFixed(2)),
       previousRoundWinningOutcome: 'UP',
-      roundNumber: 84,
-      expiryTimestampNs: BigInt(now + 14 * 60 * 1000) * 1_000_000n,
-      expiryDate: new Date(now + 14 * 60 * 1000),
+      roundNumber: epoch.roundNumber,
+      expiryTimestampNs: epoch.expiryTimestampNs,
+      expiryDate: epoch.expiryDate,
       isResolved: false,
       collateralToken: 'tUSDC',
       upTokenId: '5',
@@ -354,9 +432,9 @@ export async function fetchLiveBinaryMarkets(): Promise<BinaryMarket[]> {
       low24h: livePrices.SOMI?.low24h ?? 0.1285,
       lastClosePrice: Number((somiPrice * 0.997).toFixed(4)),
       previousRoundWinningOutcome: 'UP',
-      roundNumber: 84,
-      expiryTimestampNs: BigInt(now + 11 * 60 * 1000) * 1_000_000n,
-      expiryDate: new Date(now + 11 * 60 * 1000),
+      roundNumber: epoch.roundNumber,
+      expiryTimestampNs: epoch.expiryTimestampNs,
+      expiryDate: epoch.expiryDate,
       isResolved: false,
       collateralToken: 'tUSDC',
       upTokenId: '7',
@@ -381,9 +459,9 @@ export async function fetchLiveBinaryMarkets(): Promise<BinaryMarket[]> {
       low24h: livePrices.SUI?.low24h ?? 0.7860,
       lastClosePrice: Number((suiPrice * 1.002).toFixed(4)),
       previousRoundWinningOutcome: 'DOWN',
-      roundNumber: 84,
-      expiryTimestampNs: BigInt(now + 9 * 60 * 1000) * 1_000_000n,
-      expiryDate: new Date(now + 9 * 60 * 1000),
+      roundNumber: epoch.roundNumber,
+      expiryTimestampNs: epoch.expiryTimestampNs,
+      expiryDate: epoch.expiryDate,
       isResolved: false,
       collateralToken: 'tUSDC',
       upTokenId: '9',

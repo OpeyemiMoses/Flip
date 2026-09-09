@@ -679,7 +679,7 @@ export const RealMarketChart: React.FC<RealMarketChartProps> = ({ market }) => {
             </div>
             <div style={{ marginTop: '0.3rem', paddingTop: '0.2rem', borderTop: '1px dashed rgba(255,255,255,0.2)' }}>
               <span style={{ color: isAboveStrike ? '#00C853' : '#E50914', fontWeight: 800, fontSize: '0.68rem' }}>
-                {isAboveStrike ? '▲ ABOVE STRIKE' : '▼ BELOW STRIKE'} ($
+                {isAboveStrike ? 'ABOVE STRIKE' : 'BELOW STRIKE'} ($
                 {Math.abs(displayPrice - market.strikePrice).toFixed(2)})
               </span>
             </div>

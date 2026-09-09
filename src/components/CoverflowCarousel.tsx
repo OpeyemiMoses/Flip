@@ -53,6 +53,7 @@ interface CoverflowCarouselProps {
 export const CoverflowCarousel: React.FC<CoverflowCarouselProps> = ({ onExplore }) => {
   const [activeIndex, setActiveIndex] = useState<number>(0);
   const [copiedContract, setCopiedContract] = useState<boolean>(false);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
 
   const handlePrev = () => {
     setActiveIndex((prev) => (prev > 0 ? prev - 1 : STRATEGY_CARDS.length - 1));
@@ -72,11 +73,33 @@ export const CoverflowCarousel: React.FC<CoverflowCarouselProps> = ({ onExplore 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStart(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStart === null) return;
+    const touchEnd = e.changedTouches[0].clientX;
+    const diff = touchStart - touchEnd;
+    if (Math.abs(diff) > 40) {
+      if (diff > 0) {
+        handleNext();
+      } else {
+        handlePrev();
+      }
+    }
+    setTouchStart(null);
+  };
+
   const copyAddress = () => {
     navigator.clipboard.writeText(SOMNIA_CONFIG.collateralRouter);
     setCopiedContract(true);
     setTimeout(() => setCopiedContract(false), 2000);
   };
+
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+  const spreadX = isMobile ? 120 : 230;
+  const outerSpreadX = isMobile ? 220 : 410;
 
   return (
     <section
@@ -129,8 +152,10 @@ export const CoverflowCarousel: React.FC<CoverflowCarouselProps> = ({ onExplore 
           </p>
         </div>
 
-        {/* 3D Perspective Coverflow Carousel for User's 4 Cards */}
+        {/* 3D Perspective Coverflow Carousel with Touch Swiping */}
         <div
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
           style={{
             position: 'relative',
             height: '270px',
@@ -141,6 +166,7 @@ export const CoverflowCarousel: React.FC<CoverflowCarouselProps> = ({ onExplore 
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            touchAction: 'pan-y',
           }}
         >
           {STRATEGY_CARDS.map((card, idx) => {
@@ -165,7 +191,7 @@ export const CoverflowCarousel: React.FC<CoverflowCarouselProps> = ({ onExplore 
               opacity = 1;
               filter = 'brightness(1)';
             } else if (offset === -1 || (activeIndex === 0 && idx === STRATEGY_CARDS.length - 1 && offset !== -1)) {
-              translateX = -230;
+              translateX = -spreadX;
               translateZ = 0;
               rotateY = 20;
               scale = 0.92;
@@ -173,7 +199,7 @@ export const CoverflowCarousel: React.FC<CoverflowCarouselProps> = ({ onExplore 
               opacity = 0.82;
               filter = 'brightness(0.75)';
             } else if (offset === 1 || (activeIndex === STRATEGY_CARDS.length - 1 && idx === 0 && offset !== 1)) {
-              translateX = 230;
+              translateX = spreadX;
               translateZ = 0;
               rotateY = -20;
               scale = 0.92;
@@ -181,7 +207,7 @@ export const CoverflowCarousel: React.FC<CoverflowCarouselProps> = ({ onExplore 
               opacity = 0.82;
               filter = 'brightness(0.75)';
             } else if (offset === -2) {
-              translateX = -410;
+              translateX = -outerSpreadX;
               translateZ = -70;
               rotateY = 28;
               scale = 0.82;
@@ -189,7 +215,7 @@ export const CoverflowCarousel: React.FC<CoverflowCarouselProps> = ({ onExplore 
               opacity = 0.5;
               filter = 'brightness(0.5)';
             } else if (offset === 2) {
-              translateX = 410;
+              translateX = outerSpreadX;
               translateZ = -70;
               rotateY = -28;
               scale = 0.82;
@@ -197,7 +223,7 @@ export const CoverflowCarousel: React.FC<CoverflowCarouselProps> = ({ onExplore 
               opacity = 0.5;
               filter = 'brightness(0.5)';
             } else {
-              translateX = offset > 0 ? 520 : -520;
+              translateX = offset > 0 ? (outerSpreadX + 100) : -(outerSpreadX + 100);
               translateZ = -150;
               rotateY = offset > 0 ? -35 : 35;
               scale = 0.72;
@@ -215,6 +241,7 @@ export const CoverflowCarousel: React.FC<CoverflowCarouselProps> = ({ onExplore 
                 style={{
                   position: 'absolute',
                   width: '270px',
+                  maxWidth: '82vw',
                   height: '210px',
                   backgroundColor: '#0D0D0D',
                   border: isCenter

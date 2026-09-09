@@ -1,5 +1,6 @@
 import type { PrivyClientConfig } from '@privy-io/react-auth';
 import { defineChain } from 'viem';
+import { mainnet, sepolia } from 'viem/chains';
 
 export const somniaShannonTestnet = defineChain({
   id: 50312,
@@ -11,10 +12,16 @@ export const somniaShannonTestnet = defineChain({
   },
   rpcUrls: {
     default: {
-      http: ['https://dream-rpc.somnia.network'],
+      http: [
+        'https://api.infra.testnet.somnia.network',
+        'https://dream-rpc.somnia.network',
+      ],
     },
     public: {
-      http: ['https://dream-rpc.somnia.network'],
+      http: [
+        'https://api.infra.testnet.somnia.network',
+        'https://dream-rpc.somnia.network',
+      ],
     },
   },
   blockExplorers: {
@@ -31,23 +38,24 @@ export const PRIVY_APP_ID = ((import.meta as any).env?.VITE_PRIVY_APP_ID as stri
 export const privyConfig: PrivyClientConfig = {
   appearance: {
     theme: 'dark',
-    accentColor: '#00F2FE',
+    accentColor: '#00C853',
     logo: 'https://somnia.network/favicon.ico',
-    showWalletLoginFirst: false,
+    showWalletLoginFirst: true,
     walletList: [
       'metamask',
+      'rabby_wallet',
+      'okx_wallet',
       'coinbase_wallet',
       'rainbow',
       'detected_wallets',
-      'wallet_connect',
     ],
   },
-  loginMethods: ['email', 'wallet', 'google', 'twitter', 'discord'],
+  loginMethods: ['wallet', 'email', 'google', 'twitter', 'discord'],
   embeddedWallets: {
     ethereum: {
-      createOnLogin: 'users-without-wallets',
+      createOnLogin: 'off',
     },
   },
   defaultChain: somniaShannonTestnet,
-  supportedChains: [somniaShannonTestnet],
+  supportedChains: [somniaShannonTestnet, mainnet, sepolia],
 };

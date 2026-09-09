@@ -16,6 +16,8 @@ import {
   TrendingUp,
   TrendingDown,
   Coins,
+  AlertTriangle,
+  XCircle,
 } from 'lucide-react';
 import { BinaryMarket, calculateStrikeAndProbability } from '../services/dreamdex';
 import { ChallengeEngine, PrivateChallenge } from '../services/challengeEngine';
@@ -62,7 +64,7 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
   const getLivePrice = (asset: string): number => {
     const live = prices[asset]?.price || livePriceStreamer.getPrices()[asset]?.price || markets.find((m) => m.underlyingAsset === asset)?.currentPrice;
     if (live && live > 0) return live;
-    // CoinGecko real-time spot baselines
+    // Live spot fallback baselines
     if (asset === 'BTC') return 79052.0;
     if (asset === 'ETH') return 2482.0;
     if (asset === 'SOL') return 104.31;
@@ -87,7 +89,7 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
   // Public Market Form State
   const [publicAsset, setPublicAsset] = useState('BTC');
   const [publicStrike, setPublicStrike] = useState<number>(() => getLivePrice('BTC'));
-  const [publicDurationHours, setPublicDurationHours] = useState(1);
+  const [publicDurationMins, setPublicDurationMins] = useState(15);
   const [publicSeedCollateral, setPublicSeedCollateral] = useState(50);
 
   // Sync strike with live price only on open or token switch (prevents background polling from erasing user typed input)
@@ -244,9 +246,9 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
       const liveChange24h = freshPrices[publicAsset]?.change24h ?? 0;
 
       const now = Date.now();
-      const expiryMs = now + publicDurationHours * 60 * 60 * 1000;
+      const expiryMs = now + publicDurationMins * 60 * 1000;
       const calc = calculateStrikeAndProbability(publicStrike, publicAsset);
-      const marketTitle = `${publicAsset} / USD ${publicDurationHours}H Community Strike`;
+      const marketTitle = `${publicAsset} / USD ${publicDurationMins}M Community Strike`;
 
       // Prompt real wallet transaction or signature for seed liquidity
       const { txHash } = await WalletSigner.requestMarketCreationSigning({
@@ -591,7 +593,7 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
               {activeTab === 'squad' ? (
                 /* 1. SQUAD CHALLENGE FORM */
                 <form onSubmit={handleCreateSquad} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
-                  {/* Live CoinGecko Spot Price & Previous Close Banner */}
+                  {/* Live Spot Price & Previous Close Banner */}
                   {(() => {
                     const relatedMarket = markets.find((m) => m.underlyingAsset === squadAsset);
                     const lastClose = relatedMarket?.lastClosePrice;
@@ -622,7 +624,7 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                               }}
                             />
                             <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-black)' }}>
-                              CoinGecko Live Spot ({squadAsset}/USD):
+                              {squadAsset === 'SOMI' || squadAsset === 'SOMNIA' ? 'CoinGecko' : 'Binance'} Live Spot ({squadAsset}/USD):
                             </span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -786,14 +788,14 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{ fontWeight: 700, color: squadStrike <= 0 ? '#991B1B' : isOptimal ? '#065F46' : isFit ? '#92400E' : '#991B1B' }}>
+                          <span style={{ fontWeight: 700, color: squadStrike <= 0 ? '#991B1B' : isOptimal ? '#065F46' : isFit ? '#92400E' : '#991B1B', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                             {squadStrike <= 0
-                              ? '❌ Invalid Strike Price'
+                              ? <><XCircle size={13} />Invalid Strike Price</>
                               : isOptimal
-                              ? '✓ Market Fit: Optimal Volatility Corridor (Fit to Go Live)'
+                              ? <><CheckCircle2 size={13} />Market Fit: Optimal Volatility Corridor</>  
                               : isFit
-                              ? '⚡ Market Fit: High Volatility Strike (Fit to Go Live)'
-                              : '⚠️ Market Fit Warning: High Strike Divergence'}
+                              ? <><Zap size={13} />Market Fit: High Volatility Strike</>
+                              : <><AlertTriangle size={13} />Market Fit Warning: High Strike Divergence</>}
                           </span>
                           <span className="font-mono" style={{ fontWeight: 600, fontSize: '0.72rem' }}>
                             {diff >= 0 ? `+${diff.toFixed(2)}%` : `${diff.toFixed(2)}%`} from spot
@@ -978,7 +980,7 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
               ) : (
                 /* 2. PUBLIC MARKET FORM */
                 <form onSubmit={handleCreatePublic} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
-                  {/* Live CoinGecko Spot Price & Previous Close Banner */}
+                  {/* Live Spot Price & Previous Close Banner */}
                   {(() => {
                     const relatedMarket = markets.find((m) => m.underlyingAsset === publicAsset);
                     const lastClose = relatedMarket?.lastClosePrice;
@@ -1009,7 +1011,7 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                               }}
                             />
                             <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-black)' }}>
-                              CoinGecko Live Spot ({publicAsset}/USD):
+                              {publicAsset === 'SOMI' || publicAsset === 'SOMNIA' ? 'CoinGecko' : 'Binance'} Live Spot ({publicAsset}/USD):
                             </span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -1135,8 +1137,8 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                         Round Expiry Window
                       </label>
                       <select
-                        value={publicDurationHours}
-                        onChange={(e) => setPublicDurationHours(parseInt(e.target.value))}
+                        value={publicDurationMins}
+                        onChange={(e) => setPublicDurationMins(parseInt(e.target.value))}
                         style={{
                           width: '100%',
                           padding: '0.65rem 0.85rem',
@@ -1147,10 +1149,8 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                           boxSizing: 'border-box',
                         }}
                       >
-                        <option value="1">1 Hour Window</option>
-                        <option value="4">4 Hours Window</option>
-                        <option value="24">24 Hours (Daily)</option>
-                        <option value="168">7 Days (Weekly)</option>
+                        <option value="15">15 Minutes</option>
+                        <option value="30">30 Minutes</option>
                       </select>
                     </div>
                   </div>
@@ -1177,14 +1177,14 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{ fontWeight: 700, color: publicStrike <= 0 ? '#991B1B' : isOptimal ? '#065F46' : isFit ? '#92400E' : '#991B1B' }}>
+                          <span style={{ fontWeight: 700, color: publicStrike <= 0 ? '#991B1B' : isOptimal ? '#065F46' : isFit ? '#92400E' : '#991B1B', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                             {publicStrike <= 0
-                              ? '❌ Invalid Strike Price'
+                              ? <><XCircle size={13} />Invalid Strike Price</>
                               : isOptimal
-                              ? '✓ Market Fit: Optimal Volatility Corridor (Fit to Go Live)'
+                              ? <><CheckCircle2 size={13} />Market Fit: Optimal Volatility Corridor</>
                               : isFit
-                              ? '⚡ Market Fit: High Volatility Market (Fit to Go Live)'
-                              : '⚠️ Market Fit Warning: Extreme Strike Divergence'}
+                              ? <><Zap size={13} />Market Fit: High Volatility Market</>
+                              : <><AlertTriangle size={13} />Market Fit Warning: Extreme Strike Divergence</>}
                           </span>
                           <span className="font-mono" style={{ fontWeight: 600, fontSize: '0.72rem' }}>
                             {diff >= 0 ? `+${diff.toFixed(2)}%` : `${diff.toFixed(2)}%`} from spot
@@ -1194,7 +1194,7 @@ export const CreateMarketModal: React.FC<CreateMarketModalProps> = ({
                           {publicStrike <= 0
                             ? 'Strike price must be greater than 0.'
                             : isOptimal
-                            ? `Strike price is within active trading boundaries for ${publicDurationHours}h window. High probability of orderbook liquidity.`
+                            ? `Strike price is within active trading boundaries for ${publicDurationMins}m window. High probability of orderbook liquidity.`
                             : isFit
                             ? `Strike price is ${absDiff.toFixed(1)}% off spot price ($${spot.toLocaleString()}). Wide spread prediction.`
                             : `Strike deviates heavily from spot. Seed liquidity may experience asymmetric slippage.`}

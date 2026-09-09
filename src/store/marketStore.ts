@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import { BinaryMarket, fetchLiveBinaryMarkets, fetchLiveCryptoPrices, fetchOnchainBalances } from '../services/dreamdex';
+import {
+  BinaryMarket,
+  fetchLiveBinaryMarkets,
+  fetchLiveCryptoPrices,
+  fetchOnchainBalances,
+  getCanonical15mEpoch,
+  computeDynamicMarketProbability,
+} from '../services/dreamdex';
 import { livePriceStreamer } from '../services/livePriceStream';
 import { Position, TradingEngine, UserStats } from '../services/tradingEngine';
 import { PrivateChallenge, ChallengeEngine } from '../services/challengeEngine';
@@ -48,25 +55,77 @@ interface MarketState {
   addPrivateChallenge: (challenge: PrivateChallenge) => void;
   refreshChallenges: () => void;
   updateMarketProbabilities: (marketId: string, upProb: number) => void;
+  tickLiveOddsAndPositions: () => void;
   addToast: (toast: Omit<ToastNotification, 'id' | 'timestamp'>) => void;
   removeToast: (id: string) => void;
   clearToasts: () => void;
-  /** Number of new positions since user last viewed the Activity tab */
-  // (computed reactively in components as positions.length - lastSeenPositionCount)
-  /** The positions.length at the last time the Activity tab was visited */
+  /** Persistent set of seen position event keys: `${pos.id}:${pos.status}` */
+  seenActivityKeys: string[];
+  /** Reactively tracked unseen activity count */
+  unseenActivityCount: number;
+  /** Backwards compatible count */
   lastSeenPositionCount: number;
-  /** Call when user opens the Activity tab to clear the badge */
+  /** Call when user opens the Activity tab to clear the badge and persist viewed state */
   markActivityViewed: () => void;
 }
 
 let livePollInterval: any = null;
+let rolloverInterval: any = null;
 const STORAGE_USER_MARKETS_KEY = 'flip_user_created_markets';
+const STORAGE_CHALLENGES_KEY = 'flip_private_challenges';
 
-/**
- * Computes a realistic, volatility-calibrated next prediction strike.
- * Anchored strictly to the closing resolution price within achievable short-interval expected move bands:
- * - BTC (15m): $20 - $55 achievable move (0.025% - 0.07% of spot)
- * - ETH (15m): $2 - $5 achievable move
+const getSeenActivityStorageKey = (userAddress?: string | null): string => {
+  const addr = (userAddress || 'session').toLowerCase();
+  return `flip_seen_activity_${addr}`;
+};
+
+const saveStoredSeenKeys = (seenKeys: string[], userAddress?: string | null) => {
+  try {
+    const key = getSeenActivityStorageKey(userAddress);
+    localStorage.setItem(key, JSON.stringify(seenKeys));
+  } catch (e) {
+    console.warn('[FLIP] Failed to save seen activity keys:', e);
+  }
+};
+
+const loadStoredSeenKeys = (userAddress?: string | null, existingPositions?: Position[]): string[] => {
+  try {
+    const key = getSeenActivityStorageKey(userAddress);
+    const raw = localStorage.getItem(key);
+    if (raw !== null) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return arr;
+    } else if (existingPositions && existingPositions.length > 0) {
+      // First time initializing: mark all existing historical positions as already seen
+      // so page reload never shows old past activity as unread notifications
+      const initialKeys = Array.from(new Set(existingPositions.map((p) => `${p.id}:${p.status}`)));
+      saveStoredSeenKeys(initialKeys, userAddress);
+      return initialKeys;
+    }
+  } catch {}
+  return [];
+};
+
+const computeUnseenCount = (
+  positions: Position[],
+  userAddress: string | null,
+  seenKeys: string[]
+): number => {
+  if (!userAddress) return 0;
+  const normalizedUser = userAddress.toLowerCase();
+  const seenSet = new Set(seenKeys);
+  let count = 0;
+  for (const p of positions) {
+    if (!p.userAddress || p.userAddress.toLowerCase() === normalizedUser) {
+      const key = `${p.id}:${p.status}`;
+      if (!seenSet.has(key)) {
+        count++;
+      }
+    }
+  }
+  return count;
+};
+
 /**
  * Computes a realistic, volatility-calibrated next prediction strike.
  * Anchored strictly to the closing resolution price within achievable short-interval expected move bands:
@@ -123,6 +182,8 @@ export const useMarketStore = create<MarketState>((set, get) => ({
   positions: [],
   isLiveStreaming: false,
   toasts: [],
+  seenActivityKeys: [],
+  unseenActivityCount: 0,
   lastSeenPositionCount: 0,
   stats: {
     totalTrades: 0,
@@ -157,9 +218,22 @@ export const useMarketStore = create<MarketState>((set, get) => ({
   },
 
   markActivityViewed: () => {
-    set((state) => ({
-      lastSeenPositionCount: state.positions.length,
-    }));
+    const userAddr = get().userAddress;
+    const currentPositions = get().positions;
+    const normalizedUser = userAddr ? userAddr.toLowerCase() : 'session';
+    const seenSet = new Set(get().seenActivityKeys);
+    for (const p of currentPositions) {
+      if (!p.userAddress || p.userAddress.toLowerCase() === normalizedUser) {
+        seenSet.add(`${p.id}:${p.status}`);
+      }
+    }
+    const updatedSeenKeys = Array.from(seenSet);
+    saveStoredSeenKeys(updatedSeenKeys, userAddr);
+    set({
+      seenActivityKeys: updatedSeenKeys,
+      unseenActivityCount: 0,
+      lastSeenPositionCount: currentPositions.length,
+    });
   },
 
   setSelectedMarketId: (id: string) => set({ selectedMarketId: id }),
@@ -199,9 +273,24 @@ export const useMarketStore = create<MarketState>((set, get) => ({
         isConnected: false,
         userBalanceUSD: 0.0,
         userGasSTT: 0.0,
+        lastSeenPositionCount: 0,
+        unseenActivityCount: 0,
+        seenActivityKeys: [],
       });
+      get().refreshPositions();
     } else if (address.startsWith('0x')) {
+      const portfolioBal = TradingEngine.getPortfolioBalance(address);
+      const storedPositions = TradingEngine.getStoredPositions();
+      const seenKeys = loadStoredSeenKeys(address, storedPositions);
+      const unseen = computeUnseenCount(storedPositions, address, seenKeys);
+      set({
+        userBalanceUSD: portfolioBal,
+        seenActivityKeys: seenKeys,
+        unseenActivityCount: unseen,
+        lastSeenPositionCount: Math.max(0, storedPositions.length - unseen),
+      });
       get().refreshBalances();
+      get().refreshPositions();
     }
   },
 
@@ -211,6 +300,7 @@ export const useMarketStore = create<MarketState>((set, get) => ({
 
     try {
       const balances = await fetchOnchainBalances(address as `0x${string}`);
+      TradingEngine.setPortfolioBalance(balances.usdcBalance, address);
       set({
         userGasSTT: balances.sttGas,
         userBalanceUSD: balances.usdcBalance,
@@ -220,11 +310,14 @@ export const useMarketStore = create<MarketState>((set, get) => ({
     }
   },
 
-  setUserBalance: (balanceUSD: number, gasSTT?: number) =>
+  setUserBalance: (balanceUSD: number, gasSTT?: number) => {
+    const address = get().userAddress;
+    TradingEngine.setPortfolioBalance(balanceUSD, address || undefined);
     set((state) => ({
       userBalanceUSD: balanceUSD,
       userGasSTT: gasSTT !== undefined ? gasSTT : state.userGasSTT,
-    })),
+    }));
+  },
 
   addUserCreatedMarket: (market: BinaryMarket) => {
     set((state) => {
@@ -241,9 +334,13 @@ export const useMarketStore = create<MarketState>((set, get) => ({
   },
 
   addPrivateChallenge: (challenge: PrivateChallenge) => {
-    set((state) => ({
-      privateChallenges: [challenge, ...state.privateChallenges],
-    }));
+    set((state) => {
+      const updated = [challenge, ...state.privateChallenges];
+      try {
+        localStorage.setItem(STORAGE_CHALLENGES_KEY, JSON.stringify(updated));
+      } catch {}
+      return { privateChallenges: updated };
+    });
   },
 
   refreshChallenges: () => {
@@ -251,40 +348,16 @@ export const useMarketStore = create<MarketState>((set, get) => ({
     set({ privateChallenges: stored });
   },
 
-  checkAndRolloverMarkets: async (currentPrices?: Record<string, any>) => {
+  checkAndRolloverMarkets: (oraclePrices?: Record<string, { price: number }>) => {
     const now = Date.now();
-    const state = get();
-
-    // Check if any market has reached expiry
-    const hasExpiredMarket = state.markets.some((m) => {
-      const expiryMs =
-        m.expiryDate instanceof Date
-          ? m.expiryDate.getTime()
-          : new Date(m.expiryDate || now).getTime();
-      return now >= expiryMs && !m.isResolved;
-    });
-
-    // If resolving, fetch fresh un-cached direct live spot prices from live oracle at this exact second
-    let freshOraclePrices: Record<string, any> = currentPrices || {};
-    if (hasExpiredMarket) {
-      try {
-        freshOraclePrices = await livePriceStreamer.fetchRestPrices();
-      } catch (err) {
-        console.warn('[FLIP] Direct oracle query fallback at resolution:', err);
-        freshOraclePrices = livePriceStreamer.getPrices();
-      }
-    }
-
+    const freshOraclePrices = oraclePrices || livePriceStreamer.getPrices();
     let marketsUpdated = false;
-    const updatedMarkets = state.markets.map((m) => {
-      const expiryMs =
-        m.expiryDate instanceof Date
-          ? m.expiryDate.getTime()
-          : new Date(m.expiryDate || now).getTime();
 
-      // Check if round has expired
-      if (now >= expiryMs) {
+    const currentMarkets = get().markets;
+    const updatedMarkets = currentMarkets.map((m) => {
+      if (now >= m.expiryDate.getTime()) {
         marketsUpdated = true;
+
         // Strictly use fresh live oracle spot price at the exact moment of timer completion
         const livePrice =
           freshOraclePrices[m.underlyingAsset]?.price ||
@@ -296,21 +369,31 @@ export const useMarketStore = create<MarketState>((set, get) => ({
 
         const winningSide: 'UP' | 'DOWN' = livePrice >= m.strikePrice ? 'UP' : 'DOWN';
 
-        // 1. Settle open user positions for this market
+        // 1. Settle open user positions for this market and mark won predictions as claimable
         const { wonCount, wonUSD } = TradingEngine.resolvePositionsForMarket(m.marketId, winningSide);
 
         if (wonCount > 0) {
           get().addToast({
             type: 'success',
-            title: `${m.underlyingAsset} Prediction Won! 🏆`,
-            message: `Round resolved ${winningSide} (Strike: $${m.strikePrice.toLocaleString()} vs Spot: $${livePrice.toLocaleString()}). Payout: $${wonUSD.toFixed(2)} tUSDC credited!`,
+            title: `${m.underlyingAsset} Prediction Won! (+$${wonUSD.toFixed(2)})`,
+            message: `Round resolved ${winningSide} (Strike: $${m.strikePrice.toLocaleString()} vs Spot: $${livePrice.toLocaleString()}). Click 'Claim Payout' in your Activity ledger to redeem rewards directly to your wallet.`,
           });
         }
 
         // 2. Spawn the NEXT round with a fresh strike anchored to the previous closing price & current spot
         const isCustom = !m.marketId.startsWith('somnia-');
         const nextDurationMs = isCustom && m.marketId.includes('1h') ? 60 * 60 * 1000 : 15 * 60 * 1000;
-        const nextExpiryDate = new Date(now + nextDurationMs);
+        let nextExpiryDate: Date;
+        if (isCustom) {
+          nextExpiryDate = new Date(now + nextDurationMs);
+        } else {
+          const epoch = getCanonical15mEpoch(now);
+          const nextExpiryMs =
+            epoch.expiryDate.getTime() <= now
+              ? epoch.expiryDate.getTime() + 15 * 60 * 1000
+              : epoch.expiryDate.getTime();
+          nextExpiryDate = new Date(nextExpiryMs);
+        }
 
         // Dynamically compute next strike price anchored authentically to closing price
         const newRoundNum = (m.roundNumber || 1) + 1;
@@ -321,10 +404,13 @@ export const useMarketStore = create<MarketState>((set, get) => ({
           newRoundNum
         );
 
-        const delta = livePrice - nextStrike;
-        const deltaPct = delta / (livePrice || 1);
-        const nextUpProb = Number(Math.min(Math.max(0.50 + deltaPct * 15, 0.15), 0.85).toFixed(2));
-        const nextDownProb = Number((1 - nextUpProb).toFixed(2));
+        const { upProb: nextUpProb, downProb: nextDownProb } = computeDynamicMarketProbability({
+          spotPrice: livePrice,
+          strikePrice: nextStrike,
+          expiryDate: nextExpiryDate,
+          underlyingAsset: m.underlyingAsset,
+          now,
+        });
         const formattedStrikeStr = nextStrike < 1 ? nextStrike.toFixed(4) : nextStrike.toLocaleString(undefined, { minimumFractionDigits: nextStrike % 1 !== 0 ? 2 : 0 });
 
         return {
@@ -350,7 +436,12 @@ export const useMarketStore = create<MarketState>((set, get) => ({
     if (marketsUpdated) {
       set({ markets: updatedMarkets });
       get().refreshPositions();
-      get().refreshBalances();
+      const currentAddr = get().userAddress;
+      if (currentAddr && currentAddr.startsWith('0x')) {
+        get().refreshBalances();
+      } else {
+        set({ userBalanceUSD: TradingEngine.getPortfolioBalance(currentAddr || undefined) });
+      }
     }
   },
 
@@ -372,6 +463,10 @@ export const useMarketStore = create<MarketState>((set, get) => ({
     const storedPositions = TradingEngine.getStoredPositions();
     const storedStats = TradingEngine.getStoredStats();
     const storedChallenges = ChallengeEngine.getStoredChallenges();
+    const currentAddr = get().userAddress;
+    const initialPortfolioBal = TradingEngine.getPortfolioBalance(currentAddr || undefined);
+    const seenKeys = loadStoredSeenKeys(currentAddr, storedPositions);
+    const unseen = computeUnseenCount(storedPositions, currentAddr, seenKeys);
 
     set({
       markets: [...storedUserMarkets, ...liveMarkets],
@@ -379,20 +474,37 @@ export const useMarketStore = create<MarketState>((set, get) => ({
       privateChallenges: storedChallenges,
       positions: storedPositions,
       stats: storedStats,
+      userBalanceUSD: initialPortfolioBal,
       isLiveStreaming: true,
+      seenActivityKeys: seenKeys,
+      unseenActivityCount: unseen,
+      lastSeenPositionCount: Math.max(0, storedPositions.length - unseen),
     });
 
     // Subscribe to live spot price ticks with change-detection guard
     livePriceStreamer.subscribe((livePrices) => {
       get().checkAndRolloverMarkets(livePrices);
+
       set((state) => {
         let hasAnyChange = false;
-        const updated = state.markets.map((m) => {
+        const now = Date.now();
+
+        const updatedMarkets = state.markets.map((m) => {
           const live = livePrices[m.underlyingAsset];
           if (!live) return m;
 
+          const { upProb, downProb } = computeDynamicMarketProbability({
+            spotPrice: live.price,
+            strikePrice: m.strikePrice,
+            expiryDate: m.expiryDate,
+            underlyingAsset: m.underlyingAsset,
+            now,
+          });
+
           if (
             m.currentPrice === live.price &&
+            m.bestUpProbability === upProb &&
+            m.bestDownProbability === downProb &&
             m.change24h === live.change24h &&
             m.high24h === live.high24h &&
             m.low24h === live.low24h
@@ -401,25 +513,27 @@ export const useMarketStore = create<MarketState>((set, get) => ({
           }
 
           hasAnyChange = true;
-          const delta = live.price - m.strikePrice;
-          const deltaPct = delta / (live.price || 1);
-          const newUpProb = Math.min(Math.max(0.50 + deltaPct * 10, 0.12), 0.88);
-          const newDownProb = Number((1 - newUpProb).toFixed(2));
-
           return {
             ...m,
             currentPrice: live.price,
             change24h: live.change24h,
             high24h: live.high24h,
             low24h: live.low24h,
-            bestUpProbability: Number(newUpProb.toFixed(2)),
-            bestDownProbability: newDownProb,
-            lastUpdated: Date.now(),
+            bestUpProbability: upProb,
+            bestDownProbability: downProb,
+            lastUpdated: now,
           };
         });
 
-        if (!hasAnyChange) return state;
-        return { markets: updated };
+        // Real-time dynamic revaluation of active positions with current market probabilities
+        const { positions: updatedPositions, hasChanged: positionsChanged } =
+          TradingEngine.updateActivePositions(livePrices, updatedMarkets);
+
+        if (!hasAnyChange && !positionsChanged) return state;
+        return {
+          markets: hasAnyChange ? updatedMarkets : state.markets,
+          positions: positionsChanged ? updatedPositions : state.positions,
+        };
       });
     });
 
@@ -453,31 +567,38 @@ export const useMarketStore = create<MarketState>((set, get) => ({
         }
       }, 4000);
     }
+
+    if (!rolloverInterval) {
+      rolloverInterval = setInterval(() => {
+        get().checkAndRolloverMarkets();
+      }, 1000);
+    }
   },
 
   refreshPositions: () => {
+    const userAddr = get().userAddress;
     const storedPositions = TradingEngine.getStoredPositions();
-    const storedStats = TradingEngine.getStoredStats();
+    const storedStats = TradingEngine.getStoredStats(userAddr || undefined);
+    const seenKeys = get().seenActivityKeys.length > 0
+      ? get().seenActivityKeys
+      : loadStoredSeenKeys(userAddr, storedPositions);
+    const unseen = computeUnseenCount(storedPositions, userAddr, seenKeys);
     set({
       positions: storedPositions,
       stats: storedStats,
+      seenActivityKeys: seenKeys,
+      unseenActivityCount: unseen,
+      lastSeenPositionCount: Math.max(0, storedPositions.length - unseen),
     });
   },
 
   clearPositions: () => {
-    TradingEngine.clearStoredPositions();
+    const userAddr = get().userAddress;
+    const remaining = TradingEngine.clearResolvedPositions(userAddr || undefined);
     set({
-      positions: [],
-      stats: {
-        totalTrades: 0,
-        wins: 0,
-        losses: 0,
-        winStreak: 0,
-        maxWinStreak: 0,
-        totalVolumeUSD: 0,
-        netPnLUSD: 0,
-      },
+      positions: remaining,
     });
+    get().refreshPositions();
   },
 
   updateMarketProbabilities: (marketId: string, upProb: number) => {
@@ -495,5 +616,53 @@ export const useMarketStore = create<MarketState>((set, get) => ({
           : m
       ),
     }));
+  },
+
+  tickLiveOddsAndPositions: () => {
+    const livePrices = livePriceStreamer.getPrices();
+    const state = get();
+    const now = Date.now();
+    let hasAnyChange = false;
+
+    const updatedMarkets = state.markets.map((m) => {
+      const live = livePrices[m.underlyingAsset];
+      const spot = live?.price || m.currentPrice;
+      if (!spot) return m;
+
+      const { upProb, downProb } = computeDynamicMarketProbability({
+        spotPrice: spot,
+        strikePrice: m.strikePrice,
+        expiryDate: m.expiryDate,
+        underlyingAsset: m.underlyingAsset,
+        now,
+      });
+
+      if (
+        m.bestUpProbability === upProb &&
+        m.bestDownProbability === downProb &&
+        (!live || m.currentPrice === live.price)
+      ) {
+        return m;
+      }
+
+      hasAnyChange = true;
+      return {
+        ...m,
+        currentPrice: spot,
+        bestUpProbability: upProb,
+        bestDownProbability: downProb,
+        lastUpdated: now,
+      };
+    });
+
+    const { positions: updatedPositions, hasChanged: positionsChanged } =
+      TradingEngine.updateActivePositions(livePrices, updatedMarkets);
+
+    if (hasAnyChange || positionsChanged) {
+      set({
+        markets: hasAnyChange ? updatedMarkets : state.markets,
+        positions: positionsChanged ? updatedPositions : state.positions,
+      });
+    }
   },
 }));

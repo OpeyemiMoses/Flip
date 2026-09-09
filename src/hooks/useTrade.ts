@@ -34,6 +34,21 @@ export function useTrade() {
       return null;
     }
 
+    // Lockout phase: bets are closed 1 minute (60 seconds) prior to round settlement
+    const expiryMs =
+      market.expiryDate instanceof Date
+        ? market.expiryDate.getTime()
+        : new Date(market.expiryDate || Date.now()).getTime();
+    const timeRemainingMs = expiryMs - Date.now();
+
+    if (timeRemainingMs <= 60 * 1000) {
+      const remainingSecs = Math.max(0, Math.ceil(timeRemainingMs / 1000));
+      const msg = `Betting is closed 1 minute prior to round settlement (Lock Phase: ${remainingSecs}s to resolution). Please wait for the next round.`;
+      setError(msg);
+      addToast({ type: 'warning', title: 'Betting Closed', message: msg });
+      return null;
+    }
+
     setIsExecuting(true);
     addToast({
       type: 'info',

@@ -159,7 +159,7 @@ export const PrivateChallengeView: React.FC<PrivateChallengeViewProps> = ({
       addToast({
         type: 'success',
         title: 'Challenge Settled',
-        message: `Settled against CoinGecko live spot ($${liveSpot.toLocaleString()}). Payouts distributed on-chain!`,
+        message: `Settled against ${challenge.underlyingAsset === 'SOMI' ? 'CoinGecko' : 'Binance'} live spot ($${liveSpot.toLocaleString()}). Payouts distributed on-chain!`,
       });
     } catch (err: any) {
       addToast({
@@ -325,7 +325,7 @@ export const PrivateChallengeView: React.FC<PrivateChallengeViewProps> = ({
               {challenge.title}
             </h2>
             <div style={{ fontSize: '0.82rem', color: 'var(--color-grey-text)' }}>
-              Target Strike: <strong style={{ color: 'var(--color-black)' }}>${challenge.strikePrice.toLocaleString()}</strong> ({challenge.underlyingAsset}/USD) · Expiry: {new Date(challenge.expiryTimestampMs).toLocaleTimeString()}
+              Target Strike: <strong style={{ color: 'var(--color-black)' }}>${challenge.strikePrice.toLocaleString()}</strong> ({challenge.underlyingAsset}/USD) | Expiry: {new Date(challenge.expiryTimestampMs).toLocaleTimeString()}
             </div>
           </div>
 
@@ -357,10 +357,10 @@ export const PrivateChallengeView: React.FC<PrivateChallengeViewProps> = ({
                 }}
               >
                 <span style={{ color: 'var(--color-green)' }}>
-                  UP Pool: ${upPoolTotal} ({upParticipants.length} Bets · {challenge.totalPotUSD > 0 ? ((upPoolTotal / challenge.totalPotUSD) * 100).toFixed(0) : 50}%)
+                  UP Pool: ${upPoolTotal} ({upParticipants.length} Bets | {challenge.totalPotUSD > 0 ? ((upPoolTotal / challenge.totalPotUSD) * 100).toFixed(0) : 50}%)
                 </span>
                 <span style={{ color: 'var(--color-red)' }}>
-                  DOWN Pool: ${downPoolTotal} ({downParticipants.length} Bets · {challenge.totalPotUSD > 0 ? ((downPoolTotal / challenge.totalPotUSD) * 100).toFixed(0) : 50}%)
+                  DOWN Pool: ${downPoolTotal} ({downParticipants.length} Bets | {challenge.totalPotUSD > 0 ? ((downPoolTotal / challenge.totalPotUSD) * 100).toFixed(0) : 50}%)
                 </span>
               </div>
 
@@ -408,7 +408,7 @@ export const PrivateChallengeView: React.FC<PrivateChallengeViewProps> = ({
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', fontWeight: 700, color: 'var(--color-black)' }}>
                   <Lock size={14} color="#111" />
-                  <span>Anti-Herd Blind Ballot · Odds & Counts Sealed</span>
+                  <span>Anti-Herd Blind Ballot | Odds & Counts Sealed</span>
                 </div>
                 <span
                   style={{
@@ -460,7 +460,7 @@ export const PrivateChallengeView: React.FC<PrivateChallengeViewProps> = ({
                 <span>Round Settled On-Chain</span>
               </div>
               <div style={{ fontSize: '0.8rem', color: 'var(--color-grey-text)', marginTop: '0.2rem' }}>
-                Outcome: <strong>{challenge.winningOutcome}</strong> · Resolution: {challenge.resolutionType?.replace('_', ' ')}
+                Outcome: <strong>{challenge.winningOutcome}</strong> | Resolution: {challenge.resolutionType?.replace('_', ' ')}
               </div>
             </div>
             <div className="font-mono" style={{ fontSize: '0.85rem', fontWeight: 700 }}>
