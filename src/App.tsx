@@ -185,7 +185,8 @@ export default function App() {
       }
     } else if (authenticated && !signedInWithoutWallet && boundWalletAddress) {
       // Direct Web3 wallet login flow: userAddress is the connected wallet
-      if (userAddress !== boundWalletAddress) {
+      const current = (userAddress || '').toLowerCase();
+      if (current !== boundWalletAddress.toLowerCase()) {
         setUserAddress(boundWalletAddress);
       }
     }

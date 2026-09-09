@@ -107,11 +107,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBackToLanding, onOpenAna
 
   useEffect(() => {
     if (connectedAddress) {
-      setUserAddress(connectedAddress);
-    } else if (!authenticated && !wagmiIsConnected && userAddress) {
-      setUserAddress(null);
+      const current = (userAddress || '').toLowerCase();
+      if (current !== connectedAddress.toLowerCase()) {
+        setUserAddress(connectedAddress);
+      }
     }
-  }, [authenticated, wagmiIsConnected, connectedAddress, setUserAddress, userAddress]);
+  }, [connectedAddress, userAddress, setUserAddress]);
 
   const { placeQuickBet, isExecuting } = useTrade();
   const { positions, activePositions, historyPositions, cashOut } = usePositions();

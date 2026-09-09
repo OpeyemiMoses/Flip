@@ -261,7 +261,9 @@ export const useMarketStore = create<MarketState>((set, get) => ({
 
   setUserAddress: (address: string | null) => {
     const current = get().userAddress;
-    if (current === address) return;
+    const normalizedCurrent = current ? current.toLowerCase() : null;
+    const normalizedNew = address ? address.toLowerCase() : null;
+    if (normalizedCurrent === normalizedNew) return;
 
     set({
       userAddress: address,
@@ -289,8 +291,8 @@ export const useMarketStore = create<MarketState>((set, get) => ({
         unseenActivityCount: unseen,
         lastSeenPositionCount: Math.max(0, storedPositions.length - unseen),
       });
-      get().refreshBalances();
       get().refreshPositions();
+      get().refreshBalances();
     }
   },
 
