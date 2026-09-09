@@ -1143,39 +1143,68 @@ footer a:hover,
   border-color: var(--color-black);
 }
 
-/* Mobile Navigation Drawer / Overlay */
+/* Mobile Navigation Backdrop */
+.mobile-nav-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 998;
+  animation: fadeIn 0.2s ease both;
+}
+
+/* Mobile Navigation Drawer / Side Navigation */
 .mobile-nav-drawer {
   position: fixed;
   top: 0;
-  left: 0;
   right: 0;
   bottom: 0;
+  left: auto;
+  width: min(320px, 86vw);
+  height: 100dvh;
+  max-height: 100dvh;
   background-color: rgba(255, 255, 255, 0.98);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   z-index: 999;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 1.5rem 1.5rem 2.5rem 1.5rem;
-  animation: pageRiseIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  padding: 1.15rem 1.15rem 1.35rem 1.15rem;
+  box-shadow: -10px 0 35px rgba(0, 0, 0, 0.16);
+  border-left: 1px solid rgba(0, 0, 0, 0.08);
+  animation: slideDrawerIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  overflow: hidden;
+}
+
+@keyframes slideDrawerIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 
 .mobile-nav-link {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.85rem 0.5rem;
+  padding: 0.52rem 0.55rem;
   font-family: var(--font-bobz);
-  font-size: 1.2rem;
+  font-size: 0.92rem;
   font-weight: 700;
   color: var(--color-black);
   text-decoration: none;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  transition: all 0.2s ease;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  border-radius: 6px;
+  transition: all 0.15s ease;
 }
 
+.mobile-nav-link:hover,
 .mobile-nav-link:active {
+  background-color: rgba(0, 0, 0, 0.04);
   color: var(--color-green);
   padding-left: 0.75rem;
 }
@@ -1304,9 +1333,30 @@ footer a:hover,
     display: flex !important;
   }
 
-  /* Full-Page 50/50 Connect Wallet Split View */
+  /* Full-Page 50/50 Connect Wallet Split View (Flipped on Mobile: Login at Top, Carousel at Bottom) */
   .connect-wallet-split-container {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    min-height: 100vh !important;
     grid-template-columns: 1fr !important;
+  }
+
+  .connect-wallet-form-panel {
+    order: 1 !important;
+    padding: 1.75rem 1.25rem 2.5rem 1.25rem !important;
+    min-height: auto !important;
+    width: 100% !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+  }
+
+  .connect-wallet-story-panel {
+    order: 2 !important;
+    padding: 2.25rem 1.25rem 3rem 1.25rem !important;
+    min-height: auto !important;
+    width: 100% !important;
+    border-right: none !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
   }
 
   .connect-wallet-modal-card {

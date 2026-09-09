@@ -518,70 +518,78 @@ export default function App() {
 
       {/* Mobile Navigation Drawer Modal */}
       {isMobileMenuOpen && (
-        <div className="mobile-nav-drawer">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(0,0,0,0.08)', paddingBottom: '1rem' }}>
-            <img src="/assets/flip_full_logo.png" alt="FLIP" style={{ height: '36px', width: 'auto' }} />
-            <button
-              onClick={() => setIsMobileMenuOpen(false)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem', color: 'var(--color-black)' }}
-            >
-              <X size={22} />
-            </button>
-          </div>
+        <>
+          <div
+            className="mobile-nav-backdrop"
+            onClick={() => setIsMobileMenuOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="mobile-nav-drawer">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(0,0,0,0.08)', paddingBottom: '0.75rem' }}>
+              <img src="/assets/flip_full_logo.png" alt="FLIP" style={{ height: '32px', width: 'auto' }} />
+              <button
+                onClick={() => setIsMobileMenuOpen(false)}
+                style={{ background: 'rgba(0,0,0,0.04)', border: 'none', borderRadius: '6px', cursor: 'pointer', padding: '0.4rem', color: 'var(--color-black)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                aria-label="Close navigation menu"
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', overflowY: 'auto', padding: '1rem 0' }}>
-            <a href="#about" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
-              <span>01. About</span>
-              <ChevronRight size={16} color="#9CA3AF" />
-            </a>
-            <a href="#architecture" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
-              <span>02. Architecture</span>
-              <ChevronRight size={16} color="#9CA3AF" />
-            </a>
-            <a href="#markets" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
-              <span>03. Live Markets</span>
-              <ChevronRight size={16} color="#9CA3AF" />
-            </a>
-            <a href="#squads" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
-              <span>04. Squads (PvP)</span>
-              <ChevronRight size={16} color="#9CA3AF" />
-            </a>
-            <a href="#dynamics-pools" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
-              <span>05. Dynamics & AMM</span>
-              <ChevronRight size={16} color="#9CA3AF" />
-            </a>
-            <a href="#tokens" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
-              <span>06. Supported Tokens</span>
-              <ChevronRight size={16} color="#9CA3AF" />
-            </a>
-            <a href="#security" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
-              <span>07. Protocol Security</span>
-              <ChevronRight size={16} color="#9CA3AF" />
-            </a>
-            <a href="#docs" className="mobile-nav-link" onClick={(e) => { e.preventDefault(); handleLaunchApp('docs'); }}>
-              <span>08. Documentation</span>
-              <ChevronRight size={16} color="#9CA3AF" />
-            </a>
-            <a href="#help" className="mobile-nav-link" onClick={(e) => { e.preventDefault(); handleLaunchApp('help'); }}>
-              <span>09. Help Center & FAQs</span>
-              <ChevronRight size={16} color="#9CA3AF" />
-            </a>
-          </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', overflowY: 'auto', padding: '0.6rem 0', flex: 1 }}>
+              <a href="#about" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
+                <span>01. About</span>
+                <ChevronRight size={14} color="#9CA3AF" />
+              </a>
+              <a href="#architecture" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
+                <span>02. Architecture</span>
+                <ChevronRight size={14} color="#9CA3AF" />
+              </a>
+              <a href="#markets" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
+                <span>03. Live Markets</span>
+                <ChevronRight size={14} color="#9CA3AF" />
+              </a>
+              <a href="#squads" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
+                <span>04. Squads (PvP)</span>
+                <ChevronRight size={14} color="#9CA3AF" />
+              </a>
+              <a href="#dynamics-pools" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
+                <span>05. Dynamics & AMM</span>
+                <ChevronRight size={14} color="#9CA3AF" />
+              </a>
+              <a href="#tokens" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
+                <span>06. Supported Tokens</span>
+                <ChevronRight size={14} color="#9CA3AF" />
+              </a>
+              <a href="#security" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
+                <span>07. Protocol Security</span>
+                <ChevronRight size={14} color="#9CA3AF" />
+              </a>
+              <a href="#docs" className="mobile-nav-link" onClick={(e) => { e.preventDefault(); handleLaunchApp('docs'); }}>
+                <span>08. Documentation</span>
+                <ChevronRight size={14} color="#9CA3AF" />
+              </a>
+              <a href="#help" className="mobile-nav-link" onClick={(e) => { e.preventDefault(); handleLaunchApp('help'); }}>
+                <span>09. Help Center & FAQs</span>
+                <ChevronRight size={14} color="#9CA3AF" />
+              </a>
+            </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: '1.25rem' }}>
-            <button
-              onClick={() => handleLaunchApp('dashboard')}
-              className="btn-launch-black"
-              style={{ width: '100%', justifyContent: 'center', padding: '0.75rem 1rem', fontSize: '0.92rem' }}
-            >
-              <span>Launch Trading Terminal</span>
-              <ArrowUpRight size={15} />
-            </button>
-            <div style={{ textAlign: 'center', fontSize: '0.78rem', color: '#9CA3AF', fontFamily: 'var(--font-terminal)' }}>
-              Somnia Shannon Testnet (50312)
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: '0.75rem' }}>
+              <button
+                onClick={() => handleLaunchApp('dashboard')}
+                className="btn-launch-black"
+                style={{ width: '100%', justifyContent: 'center', padding: '0.65rem 1rem', fontSize: '0.86rem' }}
+              >
+                <span>Launch Trading Terminal</span>
+                <ArrowUpRight size={14} />
+              </button>
+              <div style={{ textAlign: 'center', fontSize: '0.72rem', color: '#9CA3AF', fontFamily: 'var(--font-terminal)' }}>
+                Somnia Shannon Testnet (50312)
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* ========================================================================= */}

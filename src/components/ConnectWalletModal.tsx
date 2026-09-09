@@ -425,18 +425,19 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
     >
       {/* LEFT COLUMN (50%): DARK STORYBOARD PANEL */}
       <div
-          style={{
-            backgroundColor: '#111111',
-            color: '#FFFFFF',
-            padding: '3.5rem 4.5rem',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            position: 'relative',
-            borderRight: '1px solid rgba(255, 255, 255, 0.08)',
-            minHeight: '100vh',
-          }}
-        >
+        className="connect-wallet-story-panel"
+        style={{
+          backgroundColor: '#111111',
+          color: '#FFFFFF',
+          padding: '3.5rem 4.5rem',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          position: 'relative',
+          borderRight: '1px solid rgba(255, 255, 255, 0.08)',
+          minHeight: '100vh',
+        }}
+      >
           {/* Top Row: Full Color Authentic Brand Logo & Shannon Live Badge */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -619,6 +620,7 @@ export const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
 
         {/* RIGHT COLUMN (50%): PRIVY ONBOARDING & WALLET BINDING */}
         <div
+          className="connect-wallet-form-panel"
           style={{
             backgroundColor: '#FFFFFF',
             padding: '3.5rem 4.5rem',
